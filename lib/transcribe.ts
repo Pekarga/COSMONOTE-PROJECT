@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { transcriptionLanguage } from "./config";
+import { deepgramKey, transcriptionLanguage } from "./config";
 import type { Segment } from "./types";
 
 interface DeepgramUtterance {
@@ -34,7 +34,7 @@ export async function transcribeWithDeepgram(
   const res = await fetch(`https://api.deepgram.com/v1/listen?${params}`, {
     method: "POST",
     headers: {
-      Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
+      Authorization: `Token ${deepgramKey()}`,
       "Content-Type": mediaType || "application/octet-stream",
     },
     body,

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { DATA_DIR, MEDIA_DIR } from "./config";
+import { DATA_DIR, MEDIA_DIR } from "./paths";
 import type { ActionItem, Note, NoteSummary, Segment } from "./types";
 
 let db: DatabaseSync | null = null;
@@ -32,6 +32,10 @@ function getDb(): DatabaseSync {
       questions TEXT NOT NULL DEFAULT '[]',
       actions TEXT NOT NULL DEFAULT '[]',
       demo INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
   `);
   return db;
@@ -162,4 +166,19 @@ export function deleteNote(id: string): void {
   const media = getMediaPath(id);
   getDb().prepare("DELETE FROM notes WHERE id = ?").run(id);
   if (media) fs.rm(media.path, { force: true }, () => {});
+}
+
+export function getSetting(key: string): string | null {
+  const r = getDb().prepare("SELECT value FROM settings WHERE key = ?").get(key) as Row | undefined;
+  return r ? String(r.value) : null;
+}
+
+export function setSetting(key: string, value: string): void {
+  if (value) {
+    getDb()
+      .prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(key, value);
+  } else {
+    getDb().prepare("DELETE FROM settings WHERE key = ?").run(key);
+  }
 }

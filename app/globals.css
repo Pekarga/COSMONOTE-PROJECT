@@ -203,3 +203,10 @@ audio, video { width: 100%; border-radius: 12px; }
 
 /* Connexion */
 .login { max-width: 380px; margin: 12vh auto 0; padding: 32px; display: flex; flex-direction: column; gap: 14px; text-align: center; }
+.demo-banner a { color: inherit; font-weight: 600; }
+select.input { appearance: auto; }
+@media (max-width: 480px) {
+  .nav { gap: 0; }
+  .nav a { padding: 7px 8px; font-size: 0.82rem; }
+  .topbar-inner { gap: 8px; }
+}

@@ -6,6 +6,7 @@ const LINKS = [
   { href: "/", label: "Mes notes" },
   { href: "/nouvelle", label: "Nouvelle note" },
   { href: "/assistant", label: "Assistant" },
+  { href: "/reglages", label: "Réglages" },
 ];
 
 export function Nav() {

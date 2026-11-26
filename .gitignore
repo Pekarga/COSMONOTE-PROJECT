@@ -7,3 +7,6 @@ data/
 *.log
 next-env.d.ts
 *.tsbuildinfo
+desktop/node_modules/
+desktop/dist/
+desktop/server-bundle/

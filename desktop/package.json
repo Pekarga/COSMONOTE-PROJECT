@@ -1,0 +1,46 @@
+{
+  "name": "le-redacteur-desktop",
+  "productName": "Le rédacteur",
+  "version": "0.1.0",
+  "description": "Le rédacteur : enregistre, transcrit et transforme tes contenus en notes claires.",
+  "author": "Le rédacteur",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:dir": "electron-builder --dir --publish never"
+  },
+  "build": {
+    "appId": "app.le-redacteur.desktop",
+    "productName": "Le rédacteur",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "icon.png",
+      "package.json"
+    ],
+    "icon": "icon.png",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Le rédacteur",
+      "artifactName": "Le-redacteur-Setup-${version}.exe"
+    },
+    "linux": {
+      "target": "dir"
+    },
+    "afterPack": "./after-pack.cjs"
+  },
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  }
+}

@@ -23,7 +23,7 @@ export const viewport: Viewport = {
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const missing = [!hasDeepgram() && "DEEPGRAM_API_KEY", !hasClaude() && "ANTHROPIC_API_KEY"].filter(Boolean);
+  const missing = [!hasDeepgram() && "Deepgram", !hasClaude() && "Anthropic"].filter(Boolean);
   return (
     <html lang="fr">
       <body>
@@ -40,14 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
         {missing.length > 0 && (
           <div className="demo-banner">
-            Mode démo : les transcriptions et les notes sont des exemples. Ajoute{" "}
-            {missing.map((k, i) => (
-              <span key={String(k)}>
-                {i > 0 && " et "}
-                <code>{k}</code>
-              </span>
-            ))}{" "}
-            dans <code>.env.local</code> pour activer la vraie IA.
+            Mode démo : les transcriptions et les notes sont des exemples. Ajoute {missing.length > 1 ? "tes clés" : "ta clé"}{" "}
+            {missing.join(" et ")}{" "}
+            dans les <Link href="/reglages">Réglages</Link> pour activer la vraie IA.
           </div>
         )}
         <main className="shell">{children}</main>

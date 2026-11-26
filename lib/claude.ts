@@ -1,13 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { CLAUDE_MODEL } from "./config";
+import { CLAUDE_MODEL, anthropicKey } from "./config";
 import type { ActionItem } from "./types";
 
-let client: Anthropic | null = null;
+let client: { key: string | null; instance: Anthropic } | null = null;
 function getClient(): Anthropic {
-  client ??= new Anthropic();
-  return client;
+  // La clé peut changer depuis la page Réglages : on recrée le client si besoin.
+  const key = anthropicKey();
+  if (!client || client.key !== key) {
+    client = { key, instance: key ? new Anthropic({ apiKey: key }) : new Anthropic() };
+  }
+  return client.instance;
 }
 
 // Si le modèle principal décline une demande, l'API relance automatiquement

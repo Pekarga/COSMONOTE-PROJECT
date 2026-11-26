@@ -1,20 +1,26 @@
-import path from "node:path";
+import { getSetting } from "./db";
 
-export const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
-export const MEDIA_DIR = path.join(DATA_DIR, "media");
+export const CLAUDE_MODEL = "claude-opus-5-5";
+
+// Les clés saisies dans la page Réglages priment sur les variables d'environnement.
+export function anthropicKey(): string | null {
+  return getSetting("anthropic_api_key") || process.env.ANTHROPIC_API_KEY || null;
+}
+
+export function deepgramKey(): string | null {
+  return getSetting("deepgram_api_key") || process.env.DEEPGRAM_API_KEY || null;
+}
 
 /** Vrai si une clé Anthropic est configurée : notes et assistant par Claude. */
 export function hasClaude(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+  return Boolean(anthropicKey() || process.env.ANTHROPIC_AUTH_TOKEN);
 }
 
 /** Vrai si une clé Deepgram est configurée : vraie transcription. */
 export function hasDeepgram(): boolean {
-  return Boolean(process.env.DEEPGRAM_API_KEY);
+  return Boolean(deepgramKey());
 }
 
 export function transcriptionLanguage(): string {
-  return process.env.TRANSCRIPTION_LANGUAGE || "fr";
+  return getSetting("transcription_language") || process.env.TRANSCRIPTION_LANGUAGE || "fr";
 }
-
-export const CLAUDE_MODEL = "claude-opus-5-5";
