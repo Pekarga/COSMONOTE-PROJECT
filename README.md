@@ -54,7 +54,7 @@ Tout reste sur ta machine, dans le dossier `data/` : la base SQLite `redacteur.d
 
 ## Construire l'installateur Windows
 
-Le workflow GitHub `Installateur Windows` construit le `.exe` sur une machine Windows, et le publie dans une release à chaque tag `v*` (par exemple `git tag v0.1.1 && git push origin v0.1.1`).
+Le workflow GitHub `Installateur Windows` construit le `.exe` sur une machine Windows, et le publie dans une release à chaque tag `v*`, ou quand tu le lances à la main depuis l'onglet Actions en indiquant une version.
 
 En local : `npm run build`, `npm run desktop:prepare`, puis dans `desktop/` : `npm install` et `npm run dist:win`.
 
