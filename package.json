@@ -1,6 +1,6 @@
 {
   "name": "le-redacteur",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Le rédacteur : enregistre, transcrit et transforme tes contenus en notes claires.",
   "scripts": {

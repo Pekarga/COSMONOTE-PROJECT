@@ -18,6 +18,18 @@ const DEMO_SCRIPT: [number, string][] = [
   [0, "Entendu. On fait un point la semaine prochaine pour décider. Merci à tous !"],
 ];
 
+export const DEMO_DOC = `La mémoire et le sommeil
+
+Pendant le sommeil profond, le cerveau rejoue les informations apprises dans la journée. Ce mécanisme aide à transférer les souvenirs vers la mémoire à long terme.
+
+Une courte sieste de vingt minutes améliore déjà la concentration. Il faut éviter de dépasser trente minutes pour ne pas se réveiller fatigué.
+
+À retenir : la régularité des horaires compte plus que la durée totale de sommeil.
+
+Combien de cycles faut-il pour une nuit vraiment réparatrice ?
+
+En pratique : relire ses notes le soir, puis les revoir le lendemain matin.`;
+
 export function demoTranscript(): { segments: Segment[]; duration: number } {
   let t = 0;
   const segments = DEMO_SCRIPT.map(([speaker, text]) => {
@@ -37,6 +49,12 @@ function sentences(text: string): string[] {
 }
 
 const ACTION_MARKERS = /\b(je vais|on va|il faut|je peux m'en charger|on doit|je m'en occupe|à faire|on fait)\b/i;
+
+export function demoNoteFromText(text: string) {
+  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const note = demoNote(paragraphs.map((p, i) => ({ speaker: 0, start: i, end: i + 1, text: p })));
+  return { ...note, title: "Exemple : document scanné" };
+}
 
 export function demoNote(segments: Segment[]): {
   title: string;

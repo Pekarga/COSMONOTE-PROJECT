@@ -13,14 +13,20 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 export async function POST(req: NextRequest) {
   const denied = await guard(req);
   if (denied) return denied;
-  const { messages } = (await req.json().catch(() => ({}))) as { messages?: ChatMessage[] };
+  const { messages, noteId } = (await req.json().catch(() => ({}))) as {
+    messages?: ChatMessage[];
+    noteId?: string;
+  };
   const clean = (messages ?? []).filter(
     (m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim(),
   );
   if (!clean.length || clean.at(-1)!.role !== "user") {
     return Response.json({ error: "Pose une question." }, { status: 400 });
   }
-  const notes = listReadyNotes();
+  // Une conversation peut porter sur une seule note, ou sur toutes.
+  const all = listReadyNotes();
+  const scoped = noteId ? all.filter((n) => n.id === noteId) : [];
+  const notes = scoped.length ? scoped : all;
   const encoder = new TextEncoder();
 
   if (!hasClaude()) {

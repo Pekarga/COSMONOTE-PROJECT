@@ -38,6 +38,19 @@ function getDb(): DatabaseSync {
       value TEXT NOT NULL
     );
   `);
+  // Migrations : colonnes ajoutées après la première version.
+  const existing = new Set(
+    (db.prepare("PRAGMA table_info(notes)").all() as Row[]).map((c) => String(c.name)),
+  );
+  const added: [string, string][] = [
+    ["kind", "TEXT NOT NULL DEFAULT 'audio'"],
+    ["tags", "TEXT NOT NULL DEFAULT '[]'"],
+    ["doc_text", "TEXT NOT NULL DEFAULT ''"],
+    ["pages", "INTEGER NOT NULL DEFAULT 0"],
+  ];
+  for (const [col, def] of added) {
+    if (!existing.has(col)) db.exec(`ALTER TABLE notes ADD COLUMN ${col} ${def}`);
+  }
   return db;
 }
 
@@ -46,6 +59,10 @@ type Row = Record<string, unknown>;
 function toNote(r: Row): Note {
   return {
     id: String(r.id),
+    kind: (r.kind as Note["kind"]) ?? "audio",
+    tags: JSON.parse(String(r.tags ?? "[]")) as string[],
+    docText: String(r.doc_text ?? ""),
+    pages: Number(r.pages ?? 0),
     title: String(r.title),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
@@ -67,20 +84,24 @@ function toNote(r: Row): Note {
 
 export function createNote(input: {
   title: string;
+  kind: Note["kind"];
   sourceName: string | null;
   mediaType: string | null;
+  /** Extension du fichier ; pour un scan, les pages vont dans un dossier. */
   ext: string;
+  pages?: number;
 }): { id: string; mediaPath: string } {
   const id = randomUUID();
   const now = new Date().toISOString();
-  const mediaPath = path.join(MEDIA_DIR, `${id}${input.ext}`);
-  fs.mkdirSync(MEDIA_DIR, { recursive: true });
+  const mediaPath =
+    input.kind === "scan" ? path.join(MEDIA_DIR, id) : path.join(MEDIA_DIR, `${id}${input.ext}`);
+  fs.mkdirSync(input.kind === "scan" ? mediaPath : MEDIA_DIR, { recursive: true });
   getDb()
     .prepare(
-      `INSERT INTO notes (id, title, created_at, updated_at, status, step, source_name, media_path, media_type)
-       VALUES (?, ?, ?, ?, 'processing', 'Envoi du fichier', ?, ?, ?)`,
+      `INSERT INTO notes (id, kind, pages, title, created_at, updated_at, status, step, source_name, media_path, media_type)
+       VALUES (?, ?, ?, ?, ?, ?, 'processing', 'Envoi du fichier', ?, ?, ?)`,
     )
-    .run(id, input.title, now, now, input.sourceName, mediaPath, input.mediaType);
+    .run(id, input.kind, input.pages ?? 0, input.title, now, now, input.sourceName, mediaPath, input.mediaType);
   return { id, mediaPath };
 }
 
@@ -98,20 +119,23 @@ export function getMediaPath(id: string): { path: string; type: string | null } 
 }
 
 export function listNotes(query?: string): NoteSummary[] {
-  const cols = "id, title, created_at, status, essentiel, duration, demo";
+  const cols = "id, kind, pages, tags, title, created_at, status, essentiel, duration, demo";
   const rows = (
     query && query.trim()
       ? getDb()
           .prepare(
             `SELECT ${cols} FROM notes
-             WHERE title LIKE ? OR essentiel LIKE ? OR resume LIKE ? OR segments LIKE ? OR actions LIKE ?
+             WHERE title LIKE ? OR essentiel LIKE ? OR resume LIKE ? OR segments LIKE ? OR actions LIKE ? OR tags LIKE ? OR doc_text LIKE ?
              ORDER BY created_at DESC`,
           )
-          .all(...Array(5).fill(`%${query.trim()}%`))
+          .all(...Array(7).fill(`%${query.trim()}%`))
       : getDb().prepare(`SELECT ${cols} FROM notes ORDER BY created_at DESC`).all()
   ) as Row[];
   return rows.map((r) => ({
     id: String(r.id),
+    kind: (r.kind as Note["kind"]) ?? "audio",
+    pages: Number(r.pages ?? 0),
+    tags: JSON.parse(String(r.tags ?? "[]")) as string[],
     title: String(r.title),
     createdAt: String(r.created_at),
     status: r.status as Note["status"],
@@ -140,6 +164,9 @@ const columns: Record<string, string> = {
   questions: "questions",
   actions: "actions",
   demo: "demo",
+  tags: "tags",
+  docText: "doc_text",
+  pages: "pages",
 };
 
 export function updateNote(id: string, patch: Partial<Note>): void {
@@ -165,7 +192,7 @@ export function updateNote(id: string, patch: Partial<Note>): void {
 export function deleteNote(id: string): void {
   const media = getMediaPath(id);
   getDb().prepare("DELETE FROM notes WHERE id = ?").run(id);
-  if (media) fs.rm(media.path, { force: true }, () => {});
+  if (media) fs.rm(media.path, { force: true, recursive: true }, () => {});
 }
 
 export function getSetting(key: string): string | null {

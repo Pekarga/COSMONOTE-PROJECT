@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
@@ -10,8 +11,18 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guard(req);
   if (denied) return denied;
-  const media = getMediaPath((await params).id);
-  if (!media || !fs.existsSync(media.path)) return new Response("Introuvable", { status: 404 });
+  const found = getMediaPath((await params).id);
+  if (!found || !fs.existsSync(found.path)) return new Response("Introuvable", { status: 404 });
+  const media = { ...found };
+  if (fs.statSync(media.path).isDirectory()) {
+    // Document scanné : une image par page.
+    const page = Math.max(1, Number(req.nextUrl.searchParams.get("page") ?? 1));
+    const file = fs.readdirSync(media.path).find((f) => f.startsWith(`page-${page}.`));
+    if (!file) return new Response("Introuvable", { status: 404 });
+    media.path = path.join(media.path, file);
+    const ext = path.extname(file).slice(1);
+    media.type = `image/${ext === "jpg" ? "jpeg" : ext}`;
+  }
   const size = fs.statSync(media.path).size;
   const type = media.type || "application/octet-stream";
   const range = req.headers.get("range")?.match(/bytes=(\d*)-(\d*)/);

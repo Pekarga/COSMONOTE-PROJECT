@@ -12,8 +12,16 @@ export interface ActionItem {
   done: boolean;
 }
 
+export type NoteKind = "audio" | "video" | "scan";
+
 export interface Note {
   id: string;
+  kind: NoteKind;
+  tags: string[];
+  /** Texte extrait d'un document scanné. */
+  docText: string;
+  /** Nombre de pages d'un document scanné. */
+  pages: number;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -34,5 +42,5 @@ export interface Note {
 
 export type NoteSummary = Pick<
   Note,
-  "id" | "title" | "createdAt" | "status" | "essentiel" | "duration" | "demo"
+  "id" | "title" | "createdAt" | "status" | "essentiel" | "duration" | "demo" | "kind" | "pages" | "tags"
 >;

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   return note ? Response.json({ note }) : Response.json({ error: "Note introuvable" }, { status: 404 });
 }
 
-const EDITABLE = ["title", "essentiel", "resume", "questions", "actions", "speakers"] as const;
+const EDITABLE = ["title", "essentiel", "resume", "questions", "actions", "speakers", "tags"] as const;
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const denied = await guard(req);

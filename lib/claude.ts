@@ -74,6 +74,53 @@ export async function generateNoteWithClaude(transcript: string): Promise<{
   };
 }
 
+const ScanSchema = NoteSchema.extend({
+  texte: z.string().describe("Le texte intégral du document, retranscrit fidèlement, paragraphes séparés par une ligne vide"),
+});
+
+export async function readScanWithClaude(
+  images: { mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string }[],
+): Promise<{
+  text: string;
+  title: string;
+  essentiel: string;
+  resume: string;
+  questions: string[];
+  actions: ActionItem[];
+}> {
+  const response = await getClient().beta.messages.parse({
+    model: CLAUDE_MODEL,
+    max_tokens: 32000,
+    ...FALLBACK,
+    output_config: { effort: "medium", format: betaZodOutputFormat(ScanSchema) },
+    system: `${NOTE_SYSTEM}
+- Les entrées sont des photos de pages d'un document (imprimé ou manuscrit). Retranscris d'abord tout le texte lisible dans « texte », dans l'ordre des pages, puis rédige la note à partir de ce texte.`,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...images.map((img) => ({
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: img.mediaType, data: img.data },
+          })),
+          { type: "text" as const, text: "Voici les pages du document à transformer en note." },
+        ],
+      },
+    ],
+  });
+  if (response.stop_reason === "refusal") throw new Error("Claude n'a pas pu traiter ce document.");
+  const out = response.parsed_output;
+  if (!out) throw new Error("La note générée n'a pas pu être lue.");
+  return {
+    text: out.texte,
+    title: out.titre,
+    essentiel: out.essentiel,
+    resume: out.resume,
+    questions: out.questions_ouvertes,
+    actions: out.actions.map((text) => ({ text, done: false })),
+  };
+}
+
 const CHAT_SYSTEM = `Tu es « Le rédacteur », l'assistant personnel de prise de notes de l'utilisateur.
 Tu réponds à ses questions à partir de ses notes, fournies ci-dessous entre balises <note>.
 - Réponds dans la langue de la question, de façon directe et concise.

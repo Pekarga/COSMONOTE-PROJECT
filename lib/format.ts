@@ -29,6 +29,12 @@ export function noteToContext(note: Note): string {
   if (note.questions.length) parts.push(`Questions ouvertes :\n- ${note.questions.join("\n- ")}`);
   if (note.actions.length)
     parts.push(`Actions :\n- ${note.actions.map((a) => `${a.done ? "[fait] " : ""}${a.text}`).join("\n- ")}`);
-  parts.push(`Transcription :\n${transcriptToText(note.segments, note.speakers)}`, "</note>");
+  if (note.tags.length) parts.push(`Tags : ${note.tags.join(", ")}`);
+  parts.push(
+    note.kind === "scan"
+      ? `Texte du document :\n${note.docText}`
+      : `Transcription :\n${transcriptToText(note.segments, note.speakers)}`,
+    "</note>",
+  );
   return parts.join("\n\n");
 }

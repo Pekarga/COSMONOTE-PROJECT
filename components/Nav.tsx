@@ -1,27 +1,23 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const LINKS = [
-  { href: "/", label: "Mes notes" },
-  { href: "/nouvelle", label: "Nouvelle note" },
-  { href: "/assistant", label: "Assistant" },
-  { href: "/reglages", label: "Réglages" },
-];
+import { GearIcon } from "./Icons";
 
 export function Nav() {
   const path = usePathname();
   if (path === "/connexion") return null;
+  const notesActive = path === "/" || path.startsWith("/notes") || path.startsWith("/scanner");
   return (
     <nav className="nav">
-      {LINKS.map((l) => {
-        const active = l.href === "/" ? path === "/" || path.startsWith("/notes") : path.startsWith(l.href);
-        return (
-          <Link key={l.href} href={l.href} className={active ? "active" : ""}>
-            {l.label}
-          </Link>
-        );
-      })}
+      <Link href="/" className={notesActive ? "active" : ""}>
+        Notes
+      </Link>
+      <Link href="/assistant" className={path.startsWith("/assistant") ? "active" : ""}>
+        Assistant
+      </Link>
+      <Link href="/reglages" className={`nav-icon ${path.startsWith("/reglages") ? "active" : ""}`} aria-label="Réglages">
+        <GearIcon size={17} />
+      </Link>
     </nav>
   );
 }
