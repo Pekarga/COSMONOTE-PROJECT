@@ -5,14 +5,14 @@ import { useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
 import { BulbIcon, CloseIcon, FolderIcon, PenIcon, SearchIcon, StarIcon, UploadIcon } from "@/components/Icons";
 import { formatDate } from "@/components/time";
-import { joindreFichiers, uploadForm } from "@/components/upload";
-import type { DossierSummary, SigneSummary } from "@/lib/types";
+import { envoyerParLots, uploadForm } from "@/components/upload";
+import type { DossierSummary, SigneCompteurs } from "@/lib/types";
 
 function Etat({ d }: { d: DossierSummary }) {
   if (d.status === "processing")
     return (
       <span className="pill">
-        <span className="spinner" /> Analyse…
+        <span className="spinner" /> En cours…
       </span>
     );
   if (d.status === "error") return <span className="pill pill-red">Erreur</span>;
@@ -21,23 +21,27 @@ function Etat({ d }: { d: DossierSummary }) {
   return <span className="pill">À rédiger</span>;
 }
 
+const PAGE = 50;
+
 export default function DossiersPage() {
   const router = useRouter();
   const [dossiers, setDossiers] = useState<DossierSummary[] | null>(null);
-  const [signes, setSignes] = useState<SigneSummary[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [limite, setLimite] = useState(PAGE);
+  const [compteurs, setCompteurs] = useState<SigneCompteurs | null>(null);
   const [query, setQuery] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lecture, setLecture] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
-      const res = await fetch(`/api/dossiers?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/dossiers?q=${encodeURIComponent(query)}&limite=${limite}`);
       if (!res.ok || cancelled) return;
-      const data = (await res.json()) as { dossiers: DossierSummary[] };
+      const data = (await res.json()) as { dossiers: DossierSummary[]; total: number };
       setDossiers(data.dossiers);
+      setTotal(data.total);
       if (data.dossiers.some((d) => d.status === "processing")) timer = setTimeout(load, 2500);
     };
     const debounce = setTimeout(load, query ? 250 : 0);
@@ -46,30 +50,36 @@ export default function DossiersPage() {
       clearTimeout(debounce);
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, limite]);
 
   useEffect(() => {
-    fetch("/api/signes")
-      .then((r) => (r.ok ? r.json() : { signes: [] }))
-      .then((d: { signes: SigneSummary[] }) => setSignes(d.signes));
+    fetch("/api/signes?limite=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { compteurs: SigneCompteurs } | null) => setCompteurs(d?.compteurs ?? null));
   }, []);
 
   async function deposer(files: File[]) {
     setError(null);
-    setLecture("Préparation des fichiers…");
-    const form = new FormData();
-    try {
-      await joindreFichiers(form, files, setLecture);
-    } finally {
-      setLecture(null);
-    }
     setProgress(0);
+    // Le premier lot crée le dossier ; les suivants (gros dossiers) s'y ajoutent.
+    let id = "";
     try {
-      const { id } = await uploadForm<{ id: string }>("/api/dossiers", form, setProgress);
+      await envoyerParLots(
+        files,
+        async (form, rang, progression) => {
+          if (rang === 0) id = (await uploadForm<{ id: string }>("/api/dossiers", form, progression)).id;
+          else {
+            form.append("role", "dossier");
+            await uploadForm(`/api/dossiers/${id}/pieces`, form, progression);
+          }
+        },
+        setProgress,
+      );
       router.push(`/dossiers/${id}`);
     } catch (e) {
       setProgress(null);
       setError(e instanceof Error ? e.message : "L'envoi a échoué.");
+      if (id) router.push(`/dossiers/${id}`);
     }
   }
 
@@ -84,8 +94,7 @@ export default function DossiersPage() {
     }
   }
 
-  const prets = (signes ?? []).filter((s) => s.status === "ready");
-  const sansModele = signes !== null && prets.length === 0;
+  const sansModele = compteurs !== null && compteurs.prets === 0;
 
   return (
     <div className="grid-2">
@@ -97,7 +106,7 @@ export default function DossiersPage() {
           <DropZone
             className="lucarne"
             onFiles={deposer}
-            disabled={progress !== null || lecture !== null}
+            disabled={progress !== null}
             icon={<FolderIcon size={34} />}
             title="Déposez ici le dossier imputé par le Directeur"
             hint={
@@ -108,12 +117,6 @@ export default function DossiersPage() {
               </>
             }
           />
-          {lecture && (
-            <div className="upload-strip">
-              <span className="spinner" />
-              <span>{lecture}</span>
-            </div>
-          )}
           {progress !== null && (
             <div className="upload-strip">
               <span>Envoi… {progress}%</span>
@@ -133,7 +136,7 @@ export default function DossiersPage() {
         <section className="card panel">
           <h2 className="panel-head vert">
             <FolderIcon size={20} /> Dossiers
-            <span className="spacer small">{dossiers ? `${dossiers.length} dossier${dossiers.length > 1 ? "s" : ""}` : ""}</span>
+            <span className="spacer small">{dossiers ? `${total} dossier${total > 1 ? "s" : ""}` : ""}</span>
           </h2>
           <div className="search">
             <SearchIcon />
@@ -177,7 +180,6 @@ export default function DossiersPage() {
                             · {d.pieces} pièce{d.pieces > 1 ? "s" : ""}
                           </span>
                         )}
-                        {d.demo && <span className="tag tag-mini">démo</span>}
                       </span>
                     </span>
                     <span className="note-item-meta">
@@ -188,6 +190,16 @@ export default function DossiersPage() {
               ))}
             </ul>
           )}
+          {dossiers && total > dossiers.length && (
+            <div className="plus">
+              <span className="small muted">
+                {dossiers.length} sur {total}
+              </span>
+              <button className="btn btn-sm" onClick={() => setLimite((n) => n + PAGE)}>
+                Afficher plus
+              </button>
+            </div>
+          )}
         </section>
       </div>
 
@@ -196,7 +208,7 @@ export default function DossiersPage() {
           <h2 className="panel-head vert">
             <StarIcon size={20} filled /> Vos modèles signés
           </h2>
-          {signes === null ? (
+          {compteurs === null ? (
             <p className="muted small">Chargement…</p>
           ) : sansModele ? (
             <p className="small">
@@ -205,8 +217,11 @@ export default function DossiersPage() {
             </p>
           ) : (
             <p className="small">
-              <strong>{prets.filter((s) => s.genre === "courrier").length}</strong> courrier(s) de réponse et{" "}
-              <strong>{prets.filter((s) => s.genre === "note").length}</strong> note(s) au Directeur servent de modèles.
+              <strong>{compteurs.prets - compteurs.notes}</strong> courrier(s) de réponse et <strong>{compteurs.notes}</strong>{" "}
+              note(s) au Directeur servent de modèles.
+              {compteurs.aLire + compteurs.enCours > 0 && (
+                <> {compteurs.aLire + compteurs.enCours} autre(s) en cours de lecture.</>
+              )}
             </p>
           )}
           <Link href="/signes" className="btn btn-sm">

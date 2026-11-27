@@ -1,3 +1,4 @@
+import { hasClaude } from "./config";
 import { createPiece, updatePiece } from "./db";
 import { fileKind, readText } from "./extract";
 import { extOf, sansTexte, writeOcr, writeUpload } from "./files";
@@ -36,6 +37,8 @@ export async function ajouterPieces(
       await writeOcr(chemin, lu);
     }
     if (texte) updatePiece(id, { texte });
+    // Scan ou photo sans texte : l'appli le lira sur l'ordinateur ; l'analyse du dossier l'attend.
+    else if ((kind === "pdf" || kind === "image") && !hasClaude()) updatePiece(id, { lecture: "attente" });
   }
   return refuses;
 }

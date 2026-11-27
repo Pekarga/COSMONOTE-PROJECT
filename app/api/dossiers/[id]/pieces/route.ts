@@ -4,7 +4,7 @@ import { getDossier, updateDossier } from "@/lib/db";
 import { UNSUPPORTED_MESSAGE } from "@/lib/extract";
 import { filesFrom, ocrFrom } from "@/lib/files";
 import { ajouterPieces } from "@/lib/pieces";
-import { processDossier } from "@/lib/process";
+import { lancerDossier } from "@/lib/process";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const refuses = await ajouterPieces(id, files, role, ocrFrom(form));
   if (refuses.length < files.length) {
     updateDossier(id, { status: "processing", step: "Lecture des nouvelles pièces" });
-    void processDossier(id);
+    lancerDossier(id);
   }
   return Response.json({ refuses, message: refuses.length ? UNSUPPORTED_MESSAGE : null }, { status: 201 });
 }

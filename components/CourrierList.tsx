@@ -40,7 +40,6 @@ export function CourrierList({ courriers }: { courriers: CourrierLigne[] }) {
               <span className="note-item-sub">
                 <span>{c.genre === "note" ? "Note au Directeur" : destinataireCourt(c.destinataire) || "Courrier"}</span>
                 {c.dossierTitre && <span>· Dossier : {c.dossierTitre}</span>}
-                {c.demo && <span className="tag tag-mini">démo</span>}
               </span>
             </span>
             <span className="note-item-meta">

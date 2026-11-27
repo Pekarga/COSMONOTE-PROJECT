@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { getDossier, updateDossier } from "@/lib/db";
-import { processDossier } from "@/lib/process";
+import { lancerDossier } from "@/lib/process";
 
 export const runtime = "nodejs";
 
@@ -12,6 +12,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!getDossier(id)) return Response.json({ error: "Dossier introuvable." }, { status: 404 });
   updateDossier(id, { status: "processing", step: "Analyse du dossier", error: null });
-  void processDossier(id);
+  lancerDossier(id);
   return Response.json({ ok: true });
 }

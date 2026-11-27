@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { deletePiece, getPiece, updateDossier, updatePiece } from "@/lib/db";
 import { sendFile } from "@/lib/files";
-import { processDossier } from "@/lib/process";
+import { lancerDossier } from "@/lib/process";
 
 export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
@@ -38,6 +38,6 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   if (!piece) return Response.json({ ok: true });
   deletePiece(id);
   updateDossier(piece.dossierId, { status: "processing", step: "Mise à jour de l'analyse" });
-  void processDossier(piece.dossierId);
+  lancerDossier(piece.dossierId);
   return Response.json({ ok: true });
 }

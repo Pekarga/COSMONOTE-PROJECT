@@ -1,4 +1,6 @@
 export type Status = "processing" | "ready" | "error";
+/** « a_lire » : scan ou photo en attente de lecture sur l'ordinateur. */
+export type SigneStatus = Status | "a_lire";
 
 export type Genre = "courrier" | "note";
 
@@ -7,7 +9,7 @@ export interface Signe {
   id: string;
   createdAt: string;
   updatedAt: string;
-  status: Status;
+  status: SigneStatus;
   error: string | null;
   demo: boolean;
   nomFichier: string;
@@ -45,6 +47,23 @@ export type SigneSummary = Pick<
   "id" | "createdAt" | "status" | "nomFichier" | "type" | "objet" | "resume" | "defaut" | "demo" | "genre"
 >;
 
+/** Compteurs des courriers signés (toute la base, pas seulement la page affichée). */
+export interface SigneCompteurs {
+  total: number;
+  prets: number;
+  notes: number;
+  erreurs: number;
+  aLire: number;
+  enCours: number;
+}
+
+/** Un scan ou une photo dont le texte reste à lire sur l'ordinateur. */
+export interface ALire {
+  genre: "signe" | "piece";
+  id: string;
+  nom: string;
+}
+
 export type PieceRole = "dossier" | "justificatif";
 
 export interface Piece {
@@ -54,8 +73,10 @@ export interface Piece {
   nom: string;
   mime: string | null;
   taille: number;
-  /** Texte lu dans le fichier (vide pour une photo en mode démo). */
+  /** Texte lu dans le fichier (pour un scan ou une photo, par la lecture sur l'ordinateur). */
   texte: string;
+  /** Scan ou photo : « attente » tant que son texte n'est pas lu, « echec » s'il n'a pas pu l'être. */
+  lecture: "" | "attente" | "echec";
   /** Pièce justificative à joindre au courrier (mention P.J.). */
   joindre: boolean;
   createdAt: string;

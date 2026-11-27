@@ -1,4 +1,4 @@
-import { ajouterTexteDesScans } from "./ocr";
+import { signalerScans } from "./LecteurScans";
 
 /** Envoie un formulaire en suivant la progression. Renvoie la réponse JSON. */
 export function uploadForm<T = Record<string, unknown>>(
@@ -53,12 +53,47 @@ export async function prepareFiles(files: File[]): Promise<File[]> {
   return Promise.all(files.map((f) => (/^image\/(jpeg|png|webp)$/.test(f.type) ? shrinkImage(f).catch(() => f) : f)));
 }
 
+/** Découpe un gros dépôt en lots (20 fichiers ou 40 Mo au plus) pour ne pas saturer la mémoire. */
+function enLots(files: File[], maxFichiers = 20, maxOctets = 40_000_000): File[][] {
+  const lots: File[][] = [];
+  let lot: File[] = [];
+  let taille = 0;
+  for (const f of files) {
+    if (lot.length && (lot.length >= maxFichiers || taille + f.size > maxOctets)) {
+      lots.push(lot);
+      lot = [];
+      taille = 0;
+    }
+    lot.push(f);
+    taille += f.size;
+  }
+  if (lot.length) lots.push(lot);
+  return lots;
+}
+
 /**
- * Met les fichiers déposés dans le formulaire. Sans clé Claude, le texte des scans et des photos
- * est d'abord lu sur l'ordinateur (sans Internet) et envoyé avec eux.
+ * Envoie des fichiers par lots, avec la progression d'ensemble (0 à 100). envoi reçoit le formulaire du lot
+ * (fichiers déjà préparés sous « file ») et son rang. Ensuite, la lecture des scans démarre en arrière-plan.
  */
-export async function joindreFichiers(form: FormData, files: File[], etat?: (message: string | null) => void): Promise<void> {
-  const prets = await prepareFiles(files);
-  for (const f of prets) form.append("file", f);
-  await ajouterTexteDesScans(form, prets, etat);
+export async function envoyerParLots<T>(
+  files: File[],
+  envoi: (form: FormData, rang: number, progression: (pct: number) => void) => Promise<T>,
+  onProgress?: (pct: number) => void,
+): Promise<T[]> {
+  const lots = enLots(files);
+  const total = files.reduce((n, f) => n + f.size, 0) || 1;
+  let fait = 0;
+  const resultats: T[] = [];
+  try {
+    for (const [rang, lot] of lots.entries()) {
+      const form = new FormData();
+      for (const f of await prepareFiles(lot)) form.append("file", f);
+      const taille = lot.reduce((n, f) => n + f.size, 0);
+      resultats.push(await envoi(form, rang, (pct) => onProgress?.(Math.round(((fait + (taille * pct) / 100) / total) * 100))));
+      fait += taille;
+    }
+  } finally {
+    signalerScans();
+  }
+  return resultats;
 }

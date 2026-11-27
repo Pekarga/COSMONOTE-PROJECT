@@ -108,6 +108,35 @@ async function verifierScan(page) {
   return null;
 }
 
+/** Gros volume : 300 courriers déposés d'un coup, lus en file d'attente, puis une recherche. */
+async function verifierVolume(page) {
+  const fichiers = Array.from({ length: 300 }, (_, i) => ({
+    name: `volume-${String(i).padStart(3, "0")}.txt`,
+    mimeType: "text/plain",
+    buffer: Buffer.from(
+      `DIRECTION DU CONTROLE BUDGETAIRE\nN° ${100 + i}/MEFB/DGBF/DCB\nObjet : Demande de virement de crédits n° ${i}\n` +
+        `Monsieur le Directeur,\nPar courrier du ${1 + (i % 28)} octobre 2026, vous avez sollicité un virement de crédits ` +
+        `de ${(i + 1) * 1000000} FCFA au profit de l'établissement ${i % 7 === 0 ? "de Korhogo" : "d'Abidjan"}.\n` +
+        `Je vous prie d'agréer, Monsieur le Directeur, l'assurance de ma considération distinguée.\n`,
+    ),
+  }));
+  const debut = Date.now();
+  await page.locator(".lucarne input[type=file]").setInputFiles(fichiers);
+  let c = null;
+  for (let i = 0; i < 240; i++) {
+    c = await page.evaluate(async () => (await (await fetch("/api/signes?limite=1")).json()).compteurs);
+    if (c.total >= 301 && !c.enCours && !c.aLire) break;
+    await page.waitForTimeout(1000);
+  }
+  const duree = Math.round((Date.now() - debut) / 1000);
+  const t = Date.now();
+  const r = await page.evaluate(async () => (await (await fetch("/api/signes?q=virement%20korhogo")).json()).total);
+  console.log(`\nVolume : ${c.total} courriers, ${c.prets} prêts en ${duree} s ; recherche « virement korhogo » : ${r} résultats en ${Date.now() - t} ms`);
+  if (c.prets < 301) return "les 300 courriers n'ont pas tous été lus";
+  if (r !== 43) return `la recherche donne ${r} résultats au lieu de 43`;
+  return null;
+}
+
 (async () => {
   const dossier = anciennesDonnees();
   const args = process.platform === "linux" ? ["--no-sandbox"] : [];
@@ -136,6 +165,8 @@ async function verifierScan(page) {
   if (texte.includes("Lucarne des dossiers imputés")) {
     const echec = await verifierScan(page).catch((e) => `lecture du scan : ${e.message}`);
     if (echec) erreurs.push(echec);
+    const volume = await verifierVolume(page).catch((e) => `volume : ${e.message}`);
+    if (volume) erreurs.push(volume);
   }
   await app.close().catch(() => {});
   const journal = path.join(dossier, "journal.txt");
@@ -145,7 +176,7 @@ async function verifierScan(page) {
     console.error("\nÉCHEC :\n- " + erreurs.join("\n- "));
     process.exit(1);
   }
-  console.log("\nL'appli démarre, affiche l'accueil sans erreur et lit un courrier scanné.");
+  console.log("\nL'appli démarre, affiche l'accueil sans erreur, lit un courrier scanné et tient 300 courriers d'un coup.");
 })().catch((e) => {
   console.error("ÉCHEC :", e);
   process.exit(1);

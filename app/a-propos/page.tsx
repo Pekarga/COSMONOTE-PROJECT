@@ -11,7 +11,7 @@ export default function AProposPage() {
         <img src="/icon.svg" alt="" />
         <div>
           <h1>Rédacteur de Courriers Administratifs</h1>
-          <p className="muted">Le rédacteur, version 0.3.3</p>
+          <p className="muted">Le rédacteur, version 0.4.0</p>
         </div>
       </div>
       <p>
@@ -20,13 +20,13 @@ export default function AProposPage() {
         signalés [à compléter], puis faites-le signer.
       </p>
       <ol className="steps">
-        <li>Modèles : déposez vos courriers signés (Word de préférence).</li>
+        <li>Modèles : déposez vos courriers signés (Word, PDF ou scans).</li>
         <li>Lucarne : glissez le dossier imputé par le Directeur.</li>
         <li>Pièces justificatives : ajoutez-les au dossier, cochez P.J. pour les mentionner.</li>
         <li>Rédigez, relisez sur la page A4, puis exportez en Word ou en PDF.</li>
       </ol>
       <p className="small muted">
-        Vos fichiers restent sur cet ordinateur. Sans clé Claude, l&apos;application fonctionne en mode démo, avec des règles simples.
+        Tout se passe sur cet ordinateur, sans Internet : vos fichiers, la lecture des scans, l&apos;analyse et la rédaction.
       </p>
     </section>
   );

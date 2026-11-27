@@ -8,7 +8,8 @@ import {
   getSigne,
   getSigneFiles,
   listPiecesWithPath,
-  listReadySignes,
+  modelesProches,
+  piecesEnAttente,
   updateCourrier,
   updateDossier,
   updateSigne,
@@ -16,6 +17,7 @@ import {
 import { analyserDossierDemo, analyserSigneDemo, redigerDemo, retoucherDemo } from "./demo";
 import { analyserDossierClaude, analyserSigneClaude, redigerClaude, retoucherClaude, type Block } from "./claude";
 import { docxLogo, docxPied, fileKind, imageMime, readText } from "./extract";
+import { enFile } from "./file-attente";
 import { readOcr, sansTexte } from "./files";
 import { FILES_DIR } from "./paths";
 import { REGLES_RELECTURE, bilan, consigneSecondePasse, enRemarques, nettoyerCourrier, relireCourrier } from "./relecture";
@@ -87,15 +89,18 @@ export async function processSigne(id: string): Promise<void> {
     }
 
     if (sansTexte(texte)) {
-      throw new Error(
-        "Ce courrier est un scan ou une photo, et son texte n'a pas encore été lu. Cliquez sur « Lire les scans sur cet ordinateur » : la lecture se fait sans Internet et sans clé.",
-      );
+      // Scan ou photo : le texte est lu par l'appli sur l'ordinateur, puis le courrier revient ici.
+      if (kind === "pdf" || kind === "image") {
+        updateSigne(id, { status: "a_lire", error: null });
+        return;
+      }
+      throw new Error("Ce fichier ne contient pas de texte lisible.");
     }
     const lu = analyserSigneDemo(texte);
     if (parOcr) {
       lu.resume = [
         lu.resume,
-        "Texte lu sur le scan par reconnaissance de caractères : vérifiez l'en-tête et les formules dans « Réglages du modèle ».",
+        "Texte lu sur le scan : vérifiez l'en-tête et les formules dans « Réglages du modèle ».",
       ]
         .filter(Boolean)
         .join(" ");
@@ -159,6 +164,16 @@ export async function processDossier(id: string): Promise<void> {
       updateDossier(id, { status: "vide", step: null, error: null });
       return;
     }
+    const attente = piecesEnAttente(id);
+    if (attente) {
+      // L'analyse reprend quand l'appli a lu le texte des scans du dossier.
+      updateDossier(id, {
+        status: "processing",
+        step: `Lecture ${attente > 1 ? `des ${attente} scans` : "du scan"} sur cet ordinateur`,
+        error: null,
+      });
+      return;
+    }
     updateDossier(id, { status: "processing", step: "Analyse du dossier", error: null });
     let analyse: Analyse;
     let demo = false;
@@ -189,20 +204,23 @@ export async function processDossier(id: string): Promise<void> {
 
 /** Les courriers signés les plus proches du courrier à rédiger servent d'exemples. */
 function choisirModeles(typeReponse: string, miseEnPageId: string | null): Signe[] {
-  const t = typeReponse.toLowerCase();
-  return listReadySignes()
-    .filter((s) => s.texte.trim())
-    .map((s) => ({
-      s,
-      score:
-        (t === "note" ? (s.genre === "note" ? 5 : 0) : s.genre === "courrier" ? 3 : 0) +
-        (t && s.type.toLowerCase() === t ? 4 : 0) +
-        (t && (s.type.toLowerCase().includes(t.split(" ")[0]) || t.includes(s.type.toLowerCase())) ? 1 : 0) +
-        (s.id === miseEnPageId ? 2 : 0),
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6)
-    .map((x) => x.s);
+  const note = typeReponse.toLowerCase() === "note";
+  return modelesProches(note ? "note" : "courrier", note ? "" : typeReponse, miseEnPageId);
+}
+
+/* ───────────── Lancement des traitements (file d'attente) ───────────── */
+
+/** Lecture d'un courrier signé : en file, deux à la fois, après les dossiers et les rédactions. */
+export function lancerSigne(id: string): void {
+  enFile(`signe:${id}`, () => processSigne(id));
+}
+
+export function lancerDossier(id: string): void {
+  enFile(`dossier:${id}`, () => processDossier(id), true);
+}
+
+export function lancerCourrier(courrierId: string, dossierId: string): void {
+  enFile(`courrier:${courrierId}`, () => processCourrier(courrierId, dossierId), true);
 }
 
 function sansExtension(nom: string) {
@@ -343,7 +361,7 @@ export async function retoucher(courrier: Courrier, instruction: string): Promis
   }
   const r = retoucherDemo(actuel, instruction);
   if (!r) {
-    return "En mode démo, trois retouches sont possibles : « plus court », « ton plus ferme » et « ton plus courtois ». Ajoutez votre clé Claude dans les Paramètres pour toutes les autres.";
+    return "Retouches automatiques possibles : « plus court », « ton plus ferme » et « ton plus courtois ». Pour toute autre modification, corrigez le texte directement dans le courrier.";
   }
   updateCourrier(courrier.id, redactionVersCourrier(await relireProjet(r, null)));
   return null;

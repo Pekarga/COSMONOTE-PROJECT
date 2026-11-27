@@ -2,92 +2,104 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
-import { LetterIcon, StarIcon, UploadIcon } from "@/components/Icons";
+import { CloseIcon, LetterIcon, SearchIcon, StarIcon, UploadIcon } from "@/components/Icons";
+import { SCAN_LU } from "@/components/LecteurScans";
 import { formatDate } from "@/components/time";
-import { relireSignes, sansCle } from "@/components/ocr";
-import { joindreFichiers, uploadForm } from "@/components/upload";
+import { envoyerParLots, uploadForm } from "@/components/upload";
 import { GENRES } from "@/lib/style";
-import type { SigneSummary } from "@/lib/types";
+import type { SigneCompteurs, SigneSummary } from "@/lib/types";
+
+const PAGE = 50;
+type Reponse = { signes: SigneSummary[]; total: number; compteurs: SigneCompteurs };
 
 export default function SignesPage() {
   const [signes, setSignes] = useState<SigneSummary[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [compteurs, setCompteurs] = useState<SigneCompteurs | null>(null);
+  const [limite, setLimite] = useState(PAGE);
+  const [query, setQuery] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [coller, setColler] = useState(false);
   const [texte, setTexte] = useState("");
-  const [lecture, setLecture] = useState<string | null>(null);
-  const [relecture, setRelecture] = useState<string | null>(null);
-  const [demo, setDemo] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/signes");
+    const res = await fetch(`/api/signes?limite=${limite}&q=${encodeURIComponent(query)}`);
     if (!res.ok) return;
-    setSignes(((await res.json()) as { signes: SigneSummary[] }).signes);
-  }, []);
+    const r = (await res.json()) as Reponse;
+    setSignes(r.signes);
+    setTotal(r.total);
+    setCompteurs(r.compteurs);
+  }, [limite, query]);
 
   useEffect(() => {
-    load();
-    sansCle().then(setDemo);
-  }, [load]);
+    const t = setTimeout(load, query ? 250 : 0);
+    // Un scan vient d'être lu sur l'ordinateur : la liste se met à jour.
+    window.addEventListener(SCAN_LU, load);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener(SCAN_LU, load);
+    };
+  }, [load, query]);
 
+  const enCours = (compteurs?.enCours ?? 0) + (compteurs?.aLire ?? 0) > 0;
   useEffect(() => {
-    if (!signes?.some((s) => s.status === "processing")) return;
-    const t = setTimeout(load, 2000);
+    if (!enCours) return;
+    const t = setTimeout(load, 3000);
     return () => clearTimeout(t);
-  }, [signes, load]);
+  }, [enCours, signes, load]);
 
-  async function envoyer(form: FormData) {
-    setError(null);
-    setMessage(null);
-    setProgress(0);
-    try {
-      const r = await uploadForm<{
-        ids: string[];
-        refuses: string[];
-        message: string | null;
-      }>("/api/signes", form, setProgress);
-      if (r.refuses.length) setMessage(`Non pris en compte : ${r.refuses.join(", ")}. ${r.message ?? ""}`);
-      setTexte("");
-      setColler(false);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "L'envoi a échoué.");
-    } finally {
-      setProgress(null);
-    }
-  }
+  type Depot = { ids: string[]; refuses: string[]; message: string | null };
 
   async function deposer(files: File[]) {
     setError(null);
     setMessage(null);
-    const form = new FormData();
+    setProgress(0);
     try {
-      await joindreFichiers(form, files, setLecture);
+      const resultats = await envoyerParLots(
+        files,
+        (form, _rang, progression) => uploadForm<Depot>("/api/signes", form, progression),
+        setProgress,
+      );
+      const refuses = resultats.flatMap((r) => r.refuses);
+      const recus = resultats.reduce((n, r) => n + r.ids.length, 0);
+      setMessage(
+        [
+          files.length > 1 ? `${recus} courrier${recus > 1 ? "s" : ""} reçu${recus > 1 ? "s" : ""} : Le rédacteur les lit un par un, vous pouvez continuer à travailler.` : "",
+          refuses.length ? `Non pris en compte : ${refuses.join(", ")}. ${resultats.find((r) => r.message)?.message ?? ""}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ") || null,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "L'envoi a échoué.");
     } finally {
-      setLecture(null);
+      setProgress(null);
+      await load();
     }
-    await envoyer(form);
+  }
+
+  async function collerTexte() {
+    if (!texte.trim()) return;
+    setError(null);
+    const form = new FormData();
+    form.append("texte", texte);
+    try {
+      await uploadForm("/api/signes", form);
+      setTexte("");
+      setColler(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "L'envoi a échoué.");
+    }
+    await load();
   }
 
   async function relireErreurs() {
-    const enErreur = (signes ?? []).filter((s) => s.status === "error");
-    setError(null);
     setMessage(null);
-    setRelecture("Préparation…");
-    try {
-      const n = await relireSignes(enErreur, (m) => setRelecture(m ?? "Analyse des courriers…"));
-      if (demo && n < enErreur.length) {
-        setMessage(
-          n
-            ? `${n} scan${n > 1 ? "s" : ""} lu${n > 1 ? "s" : ""} sur ${enErreur.length}. Pour les autres, déposez une version Word ou un PDF plus net.`
-            : "Aucun texte n'a pu être lu sur ces fichiers. Déposez une version Word, ou un scan plus net.",
-        );
-      }
-    } finally {
-      await load();
-      setRelecture(null);
-    }
+    await fetch("/api/signes/relire", { method: "POST" });
+    window.dispatchEvent(new Event("redacteur:scans-a-lire"));
+    await load();
   }
 
   async function defaut(s: SigneSummary) {
@@ -99,9 +111,7 @@ export default function SignesPage() {
     await load();
   }
 
-  const prets = signes?.filter((s) => s.status === "ready") ?? [];
-  const notes = prets.filter((s) => s.genre === "note").length;
-  const enErreur = signes?.filter((s) => s.status === "error").length ?? 0;
+  const c = compteurs;
 
   return (
     <>
@@ -117,17 +127,11 @@ export default function SignesPage() {
         <DropZone
           className="lucarne"
           onFiles={deposer}
-          disabled={progress !== null || lecture !== null || relecture !== null}
+          disabled={progress !== null}
           icon={<UploadIcon size={30} />}
           title="Déposez ici tous vos courriers signés"
-          hint="Plusieurs fichiers à la fois : Word (.docx) de préférence, PDF, ou photos et scans."
+          hint="Autant de fichiers que vous voulez, ou un dossier entier : Word (.docx), PDF, scans ou photos."
         />
-        {lecture && (
-          <div className="upload-strip">
-            <span className="spinner" />
-            <span>{lecture}</span>
-          </div>
-        )}
         {progress !== null && (
           <div className="upload-strip">
             <span>Envoi… {progress}%</span>
@@ -149,10 +153,7 @@ export default function SignesPage() {
             className="card panel"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!texte.trim()) return;
-              const form = new FormData();
-              form.append("texte", texte);
-              envoyer(form);
+              collerTexte();
             }}
           >
             <textarea
@@ -174,34 +175,44 @@ export default function SignesPage() {
       <section className="card panel">
         <h2 className="panel-head vert">
           <LetterIcon size={20} /> Modèles enregistrés
+          <span className="spacer small">{c ? `${c.total} courrier${c.total > 1 ? "s" : ""}` : ""}</span>
         </h2>
-        {signes && signes.length > 0 && (
+        {c && c.total > 0 && (
           <p className="small muted">
-            {prets.length} modèle{prets.length > 1 ? "s" : ""} prêt
-            {prets.length > 1 ? "s" : ""}
-            {prets.length > 0 &&
-              ` : ${prets.length - notes} courrier${prets.length - notes > 1 ? "s" : ""}, ${notes} note${notes > 1 ? "s" : ""}`}
-            .{" "}
-          {signes.some((s) => s.defaut)
-            ? "L'étoile marque la mise en page utilisée par défaut."
-            : "Cliquez sur une étoile pour choisir la mise en page par défaut ; sinon, Le rédacteur prend le modèle le plus complet."}
+            {c.prets} modèle{c.prets > 1 ? "s" : ""} prêt{c.prets > 1 ? "s" : ""}
+            {c.prets > 0 && ` : ${c.prets - c.notes} courrier${c.prets - c.notes > 1 ? "s" : ""}, ${c.notes} note${c.notes > 1 ? "s" : ""}`}
+            {c.aLire + c.enCours > 0 && ` · ${c.aLire + c.enCours} en cours de lecture`}. Cliquez sur une étoile pour choisir la
+            mise en page par défaut ; sinon, Le rédacteur prend le modèle le plus complet.
           </p>
         )}
 
-        {(enErreur > 0 || relecture) && (
+        {c && c.erreurs > 0 && (
           <div className="info-box relire-box">
             <span>
-              {enErreur} courrier{enErreur > 1 ? "s n'ont" : " n'a"} pas pu être lu{enErreur > 1 ? "s" : ""}
-              {demo ? " : ce sont sans doute des scans. Le rédacteur peut les lire sur cet ordinateur, sans Internet ni clé." : "."}
+              {c.erreurs} courrier{c.erreurs > 1 ? "s n'ont" : " n'a"} pas pu être lu{c.erreurs > 1 ? "s" : ""}.
             </span>
-            {relecture ? (
-              <span className="upload-strip">
-                <span className="spinner" />
-                <span>{relecture}</span>
-              </span>
-            ) : (
-              <button className="btn btn-primary btn-sm" onClick={relireErreurs} disabled={lecture !== null || progress !== null}>
-                {demo ? "Lire les scans sur cet ordinateur" : "Relire ces courriers"}
+            <button className="btn btn-primary btn-sm" onClick={relireErreurs}>
+              Relire {c.erreurs > 1 ? `les ${c.erreurs} courriers` : "ce courrier"}
+            </button>
+          </div>
+        )}
+
+        {c && c.total > PAGE && (
+          <div className="search">
+            <SearchIcon />
+            <input
+              className="input"
+              placeholder="Rechercher un modèle : objet, destinataire, mot du texte…"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setLimite(PAGE);
+              }}
+              aria-label="Rechercher un modèle"
+            />
+            {query && (
+              <button className="icon-btn search-close" onClick={() => setQuery("")} aria-label="Effacer la recherche">
+                <CloseIcon size={16} />
               </button>
             )}
           </div>
@@ -211,7 +222,7 @@ export default function SignesPage() {
           <p className="muted">Chargement…</p>
         ) : signes.length === 0 ? (
           <div className="empty">
-            <p>Aucun courrier signé pour l&apos;instant.</p>
+            <p>{query ? `Aucun modèle ne contient « ${query} ».` : "Aucun courrier signé pour l'instant."}</p>
           </div>
         ) : (
           <ul className="note-list">
@@ -226,6 +237,8 @@ export default function SignesPage() {
                     <span className="note-item-sub">
                       {s.status === "processing" ? (
                         <span>Lecture du courrier…</span>
+                      ) : s.status === "a_lire" ? (
+                        <span>Scan en attente de lecture sur cet ordinateur</span>
                       ) : s.status === "error" ? (
                         <span className="text-red">Lecture impossible</span>
                       ) : (
@@ -235,11 +248,10 @@ export default function SignesPage() {
                           <span>· {formatDate(s.createdAt)}</span>
                         </>
                       )}
-                      {s.demo && <span className="tag tag-mini">démo</span>}
                     </span>
                   </span>
                   <span className="note-item-meta">
-                    {s.status === "processing" && <span className="spinner" />}
+                    {(s.status === "processing" || s.status === "a_lire") && <span className="spinner" />}
                     {s.status === "error" && <span className="pill pill-red">Erreur</span>}
                   </span>
                 </Link>
@@ -257,6 +269,16 @@ export default function SignesPage() {
               </li>
             ))}
           </ul>
+        )}
+        {signes && total > signes.length && (
+          <div className="plus">
+            <span className="small muted">
+              {signes.length} sur {total}
+            </span>
+            <button className="btn btn-sm" onClick={() => setLimite((n) => n + PAGE)}>
+              Afficher plus
+            </button>
+          </div>
         )}
       </section>
     </>

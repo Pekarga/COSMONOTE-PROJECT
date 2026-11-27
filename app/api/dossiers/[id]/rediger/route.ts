@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { createCourrier, getDossier, updateDossier } from "@/lib/db";
-import { layoutPour, processCourrier } from "@/lib/process";
+import { layoutPour, lancerCourrier } from "@/lib/process";
 import { aujourdhui } from "@/lib/style";
 import type { Dossier } from "@/lib/types";
 
@@ -46,6 +46,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     pied: layout.pied,
     police: layout.police,
   });
-  void processCourrier(courrierId, id);
+  lancerCourrier(courrierId, id);
   return Response.json({ id: courrierId }, { status: 201 });
 }

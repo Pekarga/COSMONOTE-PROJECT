@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackIcon, OpenIcon, RefreshIcon, StarIcon, TrashIcon } from "@/components/Icons";
 import { LetterSheet } from "@/components/LetterSheet";
-import { relireSignes, sansCle } from "@/components/ocr";
+import { SCAN_LU, signalerScans } from "@/components/LecteurScans";
 import { toPng, uploadForm } from "@/components/upload";
 import { GENRES } from "@/lib/style";
 import type { Genre, Signe } from "@/lib/types";
@@ -37,8 +37,6 @@ export default function SignePage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
-  const [lecture, setLecture] = useState<string | null>(null);
-  const [demo, setDemo] = useState(false);
   const pending = useRef<Record<string, unknown>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -51,11 +49,12 @@ export default function SignePage() {
 
   useEffect(() => {
     load();
-    sansCle().then(setDemo);
+    window.addEventListener(SCAN_LU, load);
+    return () => window.removeEventListener(SCAN_LU, load);
   }, [load]);
 
   useEffect(() => {
-    if (signe?.status !== "processing") return;
+    if (signe?.status !== "processing" && signe?.status !== "a_lire") return;
     const t = setTimeout(load, 2000);
     return () => clearTimeout(t);
   }, [signe, load]);
@@ -93,17 +92,10 @@ export default function SignePage() {
     if (res.ok) setSigne(((await res.json()) as { signe: Signe }).signe);
   }
 
-  /** Relit le fichier d'origine ; sans clé, un scan est d'abord lu sur l'ordinateur. */
+  /** Relit le fichier d'origine (un scan repasse par la lecture sur l'ordinateur). */
   async function relire() {
-    if (!signe) return;
-    await flush();
-    setLecture("Préparation…");
-    try {
-      await relireSignes([signe], setLecture);
-    } finally {
-      setLecture(null);
-      await load();
-    }
+    await action({ relire: true });
+    signalerScans();
   }
 
   async function image(kind: "logo" | "signature", file: File | null) {
@@ -182,6 +174,15 @@ export default function SignePage() {
         )}
       </div>
 
+      {signe.status === "a_lire" && (
+        <div className="card processing">
+          <span className="spinner" />
+          <h2>Scan en attente de lecture…</h2>
+          <p className="muted">
+            Le rédacteur lit le texte des scans sur cet ordinateur, un par un, sans Internet. Vous pouvez continuer à travailler.
+          </p>
+        </div>
+      )}
       {signe.status === "processing" && (
         <div className="card processing">
           <span className="spinner" />
@@ -192,16 +193,9 @@ export default function SignePage() {
       {signe.status === "error" && (
         <div className="card panel">
           <div className="error-box">{signe.error}</div>
-          {lecture ? (
-            <div className="upload-strip">
-              <span className="spinner" />
-              <span>{lecture}</span>
-            </div>
-          ) : (
-            <button className="btn btn-primary" onClick={relire}>
-              <RefreshIcon size={15} /> {demo ? "Lire les scans sur cet ordinateur" : "Relire le courrier"}
-            </button>
-          )}
+          <button className="btn btn-primary" onClick={relire}>
+            <RefreshIcon size={15} /> Relire le courrier
+          </button>
         </div>
       )}
 
@@ -322,8 +316,8 @@ export default function SignePage() {
                 </label>
               ))}
               <div className="toolbar">
-                <button className="btn btn-ghost btn-sm" onClick={relire} disabled={lecture !== null}>
-                  <RefreshIcon size={15} /> {lecture ?? "Relire le fichier d'origine"}
+                <button className="btn btn-ghost btn-sm" onClick={relire}>
+                  <RefreshIcon size={15} /> Relire le fichier d&apos;origine
                 </button>
               </div>
             </div>

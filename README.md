@@ -2,7 +2,7 @@
 
 Le rédacteur prépare vos **courriers de réponse** et vos **notes au Directeur** à partir des dossiers imputés, dans la mise en page et le style de vos courriers déjà signés.
 
-- **Modèles** : déposez tous vos courriers signés (Word de préférence, PDF, photos). L'application relève l'en-tête, les armoiries, les références, la ville et la date en blanc, le destinataire, l'objet, les formules d'appel et de politesse, l'ampliation et le pied de page.
+- **Modèles** : déposez tous vos courriers signés (Word, PDF, scans, photos), autant que vous voulez. L'application relève l'en-tête, les armoiries, les références, la ville et la date en blanc, le destinataire, l'objet, les formules d'appel et de politesse, l'ampliation et le pied de page.
 - **Lucarne des dossiers imputés** : glissez le dossier imputé par le Directeur (courrier reçu, fiche d'imputation, pièces). L'application en tire le demandeur, les références, l'instruction du Directeur, l'échéance et les points à vérifier.
 - **Pièces justificatives** : ajoutez-les au dossier ; cochez « P.J. » pour les mentionner dans le courrier.
 - **Rédaction** : choisissez « Courrier de réponse » ou « Note au Directeur », écrivez vos consignes (une idée par ligne), puis relisez le projet sur une page A4 modifiable.
@@ -18,17 +18,25 @@ Téléchargez le dernier `Le-redacteur-Setup-*.exe` dans les [releases](../../re
 
 Windows peut afficher « Windows a protégé votre ordinateur », car l'installateur n'est pas signé : cliquez sur « Informations complémentaires », puis « Exécuter quand même ».
 
-## Mode démo et rédaction par Claude
+## Tout sur l'ordinateur, sans Internet
 
-Sans clé d'API, l'application fonctionne en **mode démo** : elle lit les courriers Word, les PDF texte et les fichiers texte, reprend la mise en page et les formules de vos modèles et assemble le projet à partir de vos consignes. Les photos et les PDF scannés sont lus sur l'ordinateur, sans Internet ni clé, par reconnaissance de caractères (Tesseract, en français) ; un scan pâle ou de travers se lit moins bien.
+L'application n'a besoin ni de clé ni d'Internet. Elle lit les courriers Word, les PDF et les fichiers texte, reprend la mise en page et les formules de vos modèles et assemble le projet à partir de vos consignes.
 
-Avec une clé Claude (page **Paramètres**, ou variable `ANTHROPIC_API_KEY`), elle lit tout le dossier, scans compris, analyse la demande et rédige dans votre style, puis fait une seconde relecture.
+Les photos et les PDF scannés sont lus sur l'ordinateur par reconnaissance de caractères (Tesseract, en français). La lecture tourne **en arrière-plan**, un fichier après l'autre, pendant que vous travaillez ; la barre d'état indique la progression. Si l'application est fermée en cours de route, la lecture reprend au démarrage suivant. Un scan pâle ou de travers se lit moins bien : vérifiez l'en-tête dans « Réglages du modèle ».
+
+## Gros volumes
+
+- Dépôt de centaines de fichiers, ou d'un dossier entier glissé dans la zone de dépôt : l'envoi se fait par lots de 20 fichiers, puis les courriers sont lus deux à la fois en file d'attente.
+- Recherche plein texte (SQLite FTS5, sans tenir compte des accents) dans les modèles, les dossiers, le texte de leurs pièces et les projets rédigés.
+- Listes affichées par pages de 50 (« Afficher plus »).
+- Sauvegarde automatique de la base une fois par jour dans `sauvegardes/` (les dix dernières sont gardées), et bouton « Sauvegarder maintenant » dans les Paramètres.
+- Essai : 1 040 fichiers (1 000 courriers texte et 40 scans) déposés d'un coup ; les courriers texte sont lus en quelques secondes, les 40 scans en 75 secondes en arrière-plan, et une recherche répond en moins de 10 ms.
 
 | Variable | Rôle |
 |---|---|
-| `ANTHROPIC_API_KEY` | Analyse et rédaction avec Claude (https://console.anthropic.com) |
 | `APP_PASSWORD` | Mot de passe facultatif, utile si l'application est en ligne |
 | `DATA_DIR` | Dossier des données (`./data` par défaut) |
+| `ANTHROPIC_API_KEY` | Facultatif, pour une installation web seulement : analyse et rédaction par Claude. L'appli de bureau ne l'utilise pas. |
 
 ## Lancer depuis le code
 
@@ -44,7 +52,7 @@ Puis ouvrez http://localhost:3000. Pour développer : `npm run dev`. Tests de la
 
 ## Où sont mes données ?
 
-Tout reste sur l'ordinateur, dans le dossier des données : la base SQLite `redacteur.db` et les fichiers déposés dans `fichiers/`. Avec une clé Claude, le contenu d'un dossier est envoyé à Claude au moment de l'analyse et de la rédaction.
+Tout reste sur l'ordinateur, dans le dossier des données : la base SQLite `redacteur.db`, les fichiers déposés dans `fichiers/` et les sauvegardes dans `sauvegardes/`. Rien n'est envoyé sur Internet.
 
 ## Construire l'installateur Windows
 
@@ -57,6 +65,8 @@ En local : `npm run build`, `npm run desktop:prepare`, puis dans `desktop/` : `n
 - Next.js 16 (App Router) et React 19, TypeScript
 - SQLite intégré à Node (`node:sqlite`), sans dépendance native
 - Lecture des fichiers : `mammoth` (Word), `unpdf` (PDF), `jszip` (en-têtes, pieds de page et images des `.docx`, OpenDocument)
+- Lecture des scans : `pdfjs-dist` et `tesseract.js` dans la page, fichiers copiés dans `public/ocr` par `scripts/copier-ocr.mjs`
+- Recherche : index FTS5 de SQLite ; traitements en file d'attente (`lib/file-attente.ts`), reprise au démarrage (`instrumentation.ts`)
 - Export Word avec `docx` ; export PDF par Electron (`printToPDF`)
 - Claude (`claude-opus-5-5`) via le SDK officiel `@anthropic-ai/sdk`, sorties structurées, cache du bloc des courriers signés
 - Application de bureau Electron (dossier `desktop/`) qui embarque le serveur Next.js autonome, installateur NSIS pour Windows

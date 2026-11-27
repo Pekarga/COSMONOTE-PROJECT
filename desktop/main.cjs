@@ -115,7 +115,8 @@ async function startServer() {
   return url;
 }
 
-const WEB_PREFS = { contextIsolation: true, sandbox: true, preload: path.join(__dirname, "preload.cjs") };
+// backgroundThrottling : la lecture des scans continue quand la fenêtre est réduite.
+const WEB_PREFS = { contextIsolation: true, sandbox: true, backgroundThrottling: false, preload: path.join(__dirname, "preload.cjs") };
 // Sous Windows, l'icône .ico contient toutes les tailles (barre des tâches, Alt+Tab).
 const ICONE = path.join(__dirname, process.platform === "win32" ? "icon.ico" : "icon.png");
 

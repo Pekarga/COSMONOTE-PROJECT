@@ -1,13 +1,26 @@
 "use client";
 import { useEffect, useState } from "react";
+import { DropZone } from "@/components/DropZone";
+import { toPng } from "@/components/upload";
 
-type Settings = { anthropic: string | null; nom: string; fonction: string };
+type Settings = {
+  nom: string;
+  fonction: string;
+  armoiries: "choisies" | "courriers" | null;
+  donnees: { dossier: string; signes: number; dossiers: number; pieces: number; courriers: number };
+  sauvegarde: { derniere: string | null; dossier: string; nombre: number };
+};
+
+const dateHeure = (iso: string) =>
+  new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default function SettingsPage() {
   const [current, setCurrent] = useState<Settings | null>(null);
-  const [cle, setCle] = useState("");
   const [nom, setNom] = useState("");
   const [fonction, setFonction] = useState("");
+  const [version, setVersion] = useState(0);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [sauvegardeEnCours, setSauvegardeEnCours] = useState(false);
 
   async function load() {
     const res = await fetch("/api/settings");
@@ -21,23 +34,55 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  async function save(patch: { anthropic?: string; nom?: string; fonction?: string }) {
+  async function save(patch: { nom?: string; fonction?: string }) {
     await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    setCle("");
-    // Recharge pour mettre à jour le bandeau du mode démo.
+    // Recharge pour mettre à jour le bandeau (nom et fonction).
     window.location.reload();
   }
+
+  async function armoiries(file: File | null) {
+    setErreur(null);
+    try {
+      if (file) {
+        const form = new FormData();
+        form.append("file", await toPng(file, 600));
+        const res = await fetch("/api/logo", { method: "POST", body: form });
+        if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Image refusée.");
+      } else {
+        await fetch("/api/logo", { method: "DELETE" });
+      }
+      // Recharge pour afficher les nouvelles armoiries dans le bandeau.
+      window.location.reload();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Image refusée.");
+    }
+    setVersion((v) => v + 1);
+  }
+
+  async function sauvegarderMaintenant() {
+    setSauvegardeEnCours(true);
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sauvegarder: true }),
+    });
+    if (res.ok) setCurrent((await res.json()) as Settings);
+    setSauvegardeEnCours(false);
+  }
+
+  const d = current?.donnees;
+  const s = current?.sauvegarde;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Paramètres</h1>
-          <p>La clé reste sur votre ordinateur, dans la base de données de l&apos;application.</p>
+          <p>Tout fonctionne sur cet ordinateur, sans Internet : lecture des courriers et des scans, analyse et rédaction.</p>
         </div>
       </div>
 
@@ -72,62 +117,73 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="card panel">
-          <h2 className="panel-head">Rédaction par l&apos;IA (Claude)</h2>
+        <section className="card panel" id="armoiries">
+          <h2 className="panel-head">Armoiries</h2>
           <p className="small muted">
-            Sans clé, Le rédacteur fonctionne en mode démo : il reprend la mise en page et les formules de vos courriers signés et
-            construit le projet à partir de vos consignes. Il lit les photos et les scans sur cet ordinateur, sans Internet ; vérifiez
-            ce texte, car un scan pâle ou de travers se lit moins bien. La rédaction reste simple.
-            Avec une clé Claude, il lit tout le dossier, analyse la demande et rédige dans votre style. Créez une clé sur{" "}
-            <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
-              console.anthropic.com
-            </a>
-            .
+            Affichées en haut à gauche de l&apos;application et en en-tête des courriers dont le modèle n&apos;a pas son propre logo.
+            {current?.armoiries === "courriers" && " Pour l'instant, ce sont celles relevées dans vos courriers Word."}
           </p>
-          <p className="small">
-            {current?.anthropic ? (
-              <>
-                Clé enregistrée : <code>{current.anthropic}</code>
-              </>
-            ) : (
-              <span className="pill">Mode démo</span>
-            )}
-          </p>
-          <form
-            className="toolbar"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (cle.trim()) save({ anthropic: cle });
-            }}
-          >
-            <input
-              className="input"
-              type="password"
-              autoComplete="off"
-              placeholder="sk-ant-…"
-              value={cle}
-              onChange={(e) => setCle(e.target.value)}
-              style={{ flex: 1, minWidth: 200 }}
-              aria-label="Clé Claude"
-            />
-            <button className="btn btn-primary" disabled={!cle.trim()}>
-              Enregistrer
-            </button>
-            {current?.anthropic && (
-              <button type="button" className="btn btn-ghost" onClick={() => save({ anthropic: "" })}>
-                Retirer
+          {current?.armoiries && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="armoiries-apercu" src={`/api/logo?v=${version}`} alt="Armoiries" />
+          )}
+          <DropZone
+            compact
+            multiple={false}
+            accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+            onFiles={(f) => armoiries(f[0] ?? null)}
+            title={current?.armoiries ? "Remplacer les armoiries" : "Ajouter les armoiries"}
+            hint="Image PNG ou JPEG, de préférence sur fond transparent ou blanc."
+          />
+          {erreur && <div className="error-box">{erreur}</div>}
+          {current?.armoiries === "choisies" && (
+            <div className="toolbar">
+              <button className="btn btn-ghost btn-sm" onClick={() => armoiries(null)}>
+                Retirer ces armoiries
               </button>
-            )}
-          </form>
+            </div>
+          )}
         </section>
 
         <section className="card panel">
           <h2 className="panel-head clair">Vos données</h2>
           <p className="small muted">
-            Les courriers signés, les dossiers, les pièces et les projets restent sur cet ordinateur. Avec une clé Claude, le
-            contenu d&apos;un dossier est envoyé à Claude au moment de l&apos;analyse et de la rédaction. Selon les conditions de
-            l&apos;API d&apos;Anthropic, il ne sert pas à entraîner les modèles.
+            Les courriers signés, les dossiers, les pièces et les projets restent sur cet ordinateur. Rien n&apos;est envoyé sur
+            Internet.
           </p>
+          {d && (
+            <ul className="chiffres">
+              <li>
+                <strong>{d.signes}</strong> courrier{d.signes > 1 ? "s" : ""} signé{d.signes > 1 ? "s" : ""}
+              </li>
+              <li>
+                <strong>{d.dossiers}</strong> dossier{d.dossiers > 1 ? "s" : ""} ({d.pieces} pièce{d.pieces > 1 ? "s" : ""})
+              </li>
+              <li>
+                <strong>{d.courriers}</strong> projet{d.courriers > 1 ? "s" : ""} rédigé{d.courriers > 1 ? "s" : ""}
+              </li>
+            </ul>
+          )}
+          {d && (
+            <p className="small muted">
+              Dossier des données : <code className="chemin">{d.dossier}</code>
+            </p>
+          )}
+          <h3 className="sous-titre">Sauvegardes</h3>
+          <p className="small muted">
+            Une copie de la base est faite automatiquement chaque jour ; les dix dernières sont gardées.
+            {s?.derniere ? ` Dernière sauvegarde : ${dateHeure(s.derniere)}.` : " Aucune sauvegarde pour l'instant."}
+          </p>
+          {s && (
+            <p className="small muted">
+              Dossier des sauvegardes : <code className="chemin">{s.dossier}</code>
+            </p>
+          )}
+          <div className="toolbar">
+            <button className="btn btn-sm" onClick={sauvegarderMaintenant} disabled={sauvegardeEnCours}>
+              {sauvegardeEnCours ? "Sauvegarde…" : "Sauvegarder maintenant"}
+            </button>
+          </div>
         </section>
       </div>
     </>

@@ -4,14 +4,17 @@ import { createDossier, defaultSigne, deleteDossier, listDossiers, listPieces, u
 import { UNSUPPORTED_MESSAGE } from "@/lib/extract";
 import { filesFrom, frDate, ocrFrom } from "@/lib/files";
 import { ajouterPieces } from "@/lib/pieces";
-import { processDossier } from "@/lib/process";
+import { lancerDossier } from "@/lib/process";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const denied = await guard(req);
   if (denied) return denied;
-  return Response.json({ dossiers: listDossiers(req.nextUrl.searchParams.get("q") ?? undefined) });
+  const p = req.nextUrl.searchParams;
+  return Response.json(
+    listDossiers({ q: p.get("q") ?? undefined, limite: Number(p.get("limite") ?? 50), decalage: Number(p.get("decalage") ?? 0) }),
+  );
 }
 
 /**
@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
   if (listPieces(id).length) {
     updateDossier(id, { status: "processing", step: "Lecture des pièces" });
-    void processDossier(id);
+    lancerDossier(id);
   }
   return Response.json({ id, refuses, message: refuses.length ? UNSUPPORTED_MESSAGE : null }, { status: 201 });
 }

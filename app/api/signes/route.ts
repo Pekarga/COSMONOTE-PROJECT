@@ -1,17 +1,24 @@
 import fs from "node:fs/promises";
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
-import { createSigne, listSignes } from "@/lib/db";
+import { compterSignes, createSigne, listSignes } from "@/lib/db";
 import { UNSUPPORTED_MESSAGE, fileKind } from "@/lib/extract";
 import { extOf, filesFrom, ocrFrom, writeOcr, writeUpload } from "@/lib/files";
-import { processSigne } from "@/lib/process";
+import { lancerSigne } from "@/lib/process";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const denied = await guard(req);
   if (denied) return denied;
-  return Response.json({ signes: listSignes() });
+  const p = req.nextUrl.searchParams;
+  const { signes, total } = listSignes({
+    q: p.get("q") ?? undefined,
+    prets: p.get("prets") === "1",
+    limite: Number(p.get("limite") ?? 50),
+    decalage: Number(p.get("decalage") ?? 0),
+  });
+  return Response.json({ signes, total, compteurs: compterSignes() });
 }
 
 /** Dépôt de courriers signés : plusieurs fichiers à la fois, ou un texte collé. */
@@ -43,10 +50,8 @@ export async function POST(req: NextRequest) {
     await fs.writeFile(chemin, texte, "utf8");
     ids.push(id);
   }
-  // Un courrier à la fois, pour rester sous les limites de l'API.
-  void (async () => {
-    for (const id of ids) await processSigne(id);
-  })();
+  // En file d'attente : les centaines de courriers d'un gros dépôt sont lus deux par deux.
+  for (const id of ids) lancerSigne(id);
   return Response.json(
     { ids, refuses: refuses.map((f) => f.name), message: refuses.length ? UNSUPPORTED_MESSAGE : null },
     { status: 201 },

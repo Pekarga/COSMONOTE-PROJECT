@@ -1,7 +1,7 @@
 /**
- * Mode démo : sans clé Claude, Le rédacteur lit les courriers avec des règles simples
+ * Lecture et rédaction sur l'ordinateur, sans Internet : Le rédacteur lit les courriers avec des règles simples
  * et assemble les réponses à partir de formules administratives d'usage.
- * Le résultat est à relire de près ; la vraie rédaction demande la clé Claude.
+ * Le résultat est à relire de près.
  */
 import { FORMULE_NOTE, adapterPolitesse, appelDepuisDestinataire, politesseDefaut, villeEspacee } from "./style";
 import type { Analyse, Genre, Redaction, Ton } from "./types";
@@ -360,10 +360,9 @@ export function analyserDossierDemo(pieces: { nom: string; role: string; texte: 
   const dateTexte = date ? `${date[1]} ${date[2].toLowerCase()} ${date[3]}` : "";
 
   const points = [
-    "Mode démo : cette analyse repère des mots-clés. Ajoutez votre clé Claude dans les Paramètres pour une vraie analyse.",
     ...(sansTexte.length
       ? [
-          `Pièces dont le texte n'a pas été lu (photo ou scan) : ${sansTexte.join(", ")}. Retirez-les puis déposez-les de nouveau pour les lire sur cet ordinateur, ou déposez une version plus nette.`,
+          `Pièces dont le texte n'a pas pu être lu (scan pâle ou photo floue) : ${sansTexte.join(", ")}. Déposez une version plus nette, ou le fichier Word.`,
         ]
       : []),
     demandeur ? "Vérifier le destinataire de la réponse." : "Compléter le destinataire de la réponse.",
@@ -381,7 +380,7 @@ export function analyserDossierDemo(pieces: { nom: string; role: string; texte: 
     .join(" ");
 
   return {
-    resume: resume || "Aucun texte lisible dans les pièces en mode démo.",
+    resume: resume || "Aucun texte lisible dans les pièces.",
     demandeur,
     appel: demandeur ? appelDepuisDestinataire(demandeur) : "",
     dateCourrier: dateTexte,
@@ -393,7 +392,7 @@ export function analyserDossierDemo(pieces: { nom: string; role: string; texte: 
     elements: pieces
       .filter((p) => p.role === "justificatif")
       .map((p) => `${p.nom} : ${sentences(p.texte)[0] ?? "pièce à examiner"}`),
-    pieces: pieces.map((p) => ({ nom: p.nom, apport: sentences(p.texte)[0] ?? "Contenu non lu en mode démo." })),
+    pieces: pieces.map((p) => ({ nom: p.nom, apport: sentences(p.texte)[0] ?? "Contenu non lu." })),
     pointsAVerifier: points,
     orientation: "Précisez dans les consignes la suite à donner : favorable, défavorable ou demande de régularisation.",
     objetReponse: b.objet ? (/^(votre|vos)\b/i.test(b.objet) ? b.objet : `Votre ${b.objet.charAt(0).toLowerCase()}${b.objet.slice(1)}`) : "",
@@ -526,7 +525,7 @@ export function redigerDemo(input: {
     pj: input.pj,
     ampliation: note ? [] : ampliation,
     remarques: [
-      "Mode démo : ce projet est assemblé à partir de vos consignes et de formules d'usage, sans IA. Ajoutez votre clé Claude dans les Paramètres pour une vraie rédaction dans votre style.",
+      "Projet assemblé à partir de vos consignes et des formules de vos courriers signés : complétez et relisez le fond avant signature.",
       ...(a?.pointsAVerifier.filter((p) => !p.startsWith("Mode démo")) ?? []),
     ],
   };

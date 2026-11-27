@@ -8,8 +8,12 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const denied = await guard(req);
   if (denied) return denied;
-  const q = req.nextUrl.searchParams.get("q") ?? "";
-  const courriers = listAllCourriers(q).map((c) => ({
+  const p = req.nextUrl.searchParams;
+  const { courriers: liste, total } = listAllCourriers(p.get("q") ?? "", {
+    limite: Number(p.get("limite") ?? 100),
+    decalage: Number(p.get("decalage") ?? 0),
+  });
+  const courriers = liste.map((c) => ({
     id: c.id,
     dossierId: c.dossierId,
     dossierTitre: c.dossierTitre,
@@ -21,5 +25,5 @@ export async function GET(req: NextRequest) {
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   }));
-  return Response.json({ courriers });
+  return Response.json({ courriers, total });
 }

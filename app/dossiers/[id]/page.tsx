@@ -16,7 +16,8 @@ import {
   TrashIcon,
 } from "@/components/Icons";
 import { formatDate } from "@/components/time";
-import { joindreFichiers, uploadForm } from "@/components/upload";
+import { SCAN_LU } from "@/components/LecteurScans";
+import { envoyerParLots, uploadForm } from "@/components/upload";
 import type { Dossier, Genre, Piece, PieceRole, SigneSummary, Ton } from "@/lib/types";
 
 type CourrierLigne = {
@@ -75,7 +76,6 @@ export default function DossierPage() {
   const [genre, setGenre] = useState<Genre>("courrier");
   const [signeId, setSigneId] = useState<string>("");
   const [envoi, setEnvoi] = useState<{ role: PieceRole; pct: number } | null>(null);
-  const [lecture, setLecture] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [redaction, setRedaction] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -101,9 +101,12 @@ export default function DossierPage() {
 
   useEffect(() => {
     load();
-    fetch("/api/signes")
+    fetch("/api/signes?prets=1&limite=500")
       .then((r) => (r.ok ? r.json() : { signes: [] }))
-      .then((d: { signes: SigneSummary[] }) => setSignes(d.signes.filter((s) => s.status === "ready")));
+      .then((d: { signes: SigneSummary[] }) => setSignes(d.signes));
+    // Un scan du dossier vient d'être lu sur l'ordinateur : l'analyse avance.
+    window.addEventListener(SCAN_LU, load);
+    return () => window.removeEventListener(SCAN_LU, load);
   }, [load]);
 
   const enCours = data?.dossier.status === "processing" || data?.courriers.some((c) => c.status === "processing");
@@ -124,19 +127,17 @@ export default function DossierPage() {
   async function ajouter(files: File[], role: PieceRole) {
     setError(null);
     setEnvoi({ role, pct: 0 });
-    const form = new FormData();
-    form.append("role", role);
-    setLecture("Préparation des fichiers…");
     try {
-      await joindreFichiers(form, files, setLecture);
-    } finally {
-      setLecture(null);
-    }
-    try {
-      const r = await uploadForm<{ message: string | null; refuses: string[] }>(`/api/dossiers/${id}/pieces`, form, (pct) =>
-        setEnvoi({ role, pct }),
+      const resultats = await envoyerParLots(
+        files,
+        (form, _rang, progression) => {
+          form.append("role", role);
+          return uploadForm<{ message: string | null; refuses: string[] }>(`/api/dossiers/${id}/pieces`, form, progression);
+        },
+        (pct) => setEnvoi({ role, pct }),
       );
-      if (r.refuses?.length) setError(`Non ajoutés : ${r.refuses.join(", ")}. ${r.message ?? ""}`);
+      const refuses = resultats.flatMap((r) => r.refuses ?? []);
+      if (refuses.length) setError(`Non ajoutés : ${refuses.join(", ")}. ${resultats.find((r) => r.message)?.message ?? ""}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "L'envoi a échoué.");
     }
@@ -224,7 +225,9 @@ export default function DossierPage() {
         </a>
         <span className="piece-sub">
           {taille(p.taille)}
-          {!p.texte && !/\.(jpe?g|png|webp)$/i.test(p.nom) && " · sans texte lisible"}
+          {p.lecture === "attente" && " · lecture du scan en cours…"}
+          {p.lecture === "echec" && " · scan illisible"}
+          {!p.lecture && !p.texte && " · sans texte lisible"}
           {/\.(jpe?g|png|webp)$/i.test(p.nom) && " · photo"}
         </span>
       </span>
@@ -273,7 +276,6 @@ export default function DossierPage() {
       </div>
       <p className="note-meta">
         Créé {formatDate(dossier.createdAt).toLowerCase()} · {pieces.length} pièce{pieces.length > 1 ? "s" : ""}
-        {dossier.demo && <span className="tag tag-mini">analyse démo</span>}
       </p>
 
       {error && (
@@ -293,7 +295,7 @@ export default function DossierPage() {
               compact
               onFiles={(f) => ajouter(f, "dossier")}
               disabled={envoi !== null}
-              title={envoi?.role === "dossier" ? (lecture ?? `Envoi… ${envoi.pct}%`) : "Ajouter des pièces au dossier"}
+              title={envoi?.role === "dossier" ? `Envoi… ${envoi.pct}%` : "Ajouter des pièces au dossier"}
               hint="Courrier reçu, fiche d'imputation, décision…"
             />
           </section>
@@ -314,7 +316,7 @@ export default function DossierPage() {
               compact
               onFiles={(f) => ajouter(f, "justificatif")}
               disabled={envoi !== null}
-              title={envoi?.role === "justificatif" ? (lecture ?? `Envoi… ${envoi.pct}%`) : "Ajouter des pièces justificatives"}
+              title={envoi?.role === "justificatif" ? `Envoi… ${envoi.pct}%` : "Ajouter des pièces justificatives"}
             />
           </section>
         </aside>
@@ -482,7 +484,6 @@ export default function DossierPage() {
                         <span className="note-item-title">{c.objet || "Projet en cours de rédaction"}</span>
                         <span className="note-item-sub">
                           {formatDate(c.createdAt)}
-                          {c.demo && <span className="tag tag-mini">démo</span>}
                         </span>
                       </span>
                       <span className="note-item-meta">

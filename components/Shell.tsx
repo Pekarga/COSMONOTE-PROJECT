@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useLecteurScans } from "./LecteurScans";
 import {
   CheckIcon,
   FolderIcon,
@@ -81,12 +82,18 @@ async function nouveauCourrier(router: ReturnType<typeof useRouter>) {
 function Armoiries() {
   const [ok, setOk] = useState(true);
   const ref = useRef<HTMLImageElement>(null);
-  // Sans armoiries enregistrées, l'image peut échouer avant que la page soit active : on vérifie au chargement.
+  // L'image peut échouer avant que la page soit active : on vérifie au chargement.
   useEffect(() => {
     const img = ref.current;
     if (img?.complete && img.naturalWidth === 0) setOk(false);
   }, []);
-  if (!ok) return null;
+  if (!ok) {
+    return (
+      <Link href="/reglages#armoiries" className="banner-logo banner-logo-vide" title="Ajouter les armoiries dans les Paramètres">
+        Ajouter les armoiries
+      </Link>
+    );
+  }
   // eslint-disable-next-line @next/next/no-img-element
   return <img ref={ref} className="banner-logo" src="/api/logo" alt="Armoiries" onError={() => setOk(false)} />;
 }
@@ -245,20 +252,19 @@ function MenuLateral() {
   );
 }
 
-function BarreEtat({ status, demo }: { status: ShellStatus | null; demo: boolean }) {
+function BarreEtat({ status, lecture }: { status: ShellStatus | null; lecture: string | null }) {
   const c = status?.compteurs;
   return (
     <footer className="statusbar no-print">
       <span className="status-ok">
-        <span className="status-dot">
-          <CheckIcon size={12} />
-        </span>
-        {status?.message || "Prêt"}
-        {demo && (
-          <Link href="/reglages" className="status-demo" title="Ajoutez votre clé Claude dans les Paramètres">
-            Mode démo
-          </Link>
+        {lecture ? (
+          <span className="spinner status-spinner" />
+        ) : (
+          <span className="status-dot">
+            <CheckIcon size={12} />
+          </span>
         )}
+        <span className="status-texte">{status?.message || lecture || "Prêt"}</span>
       </span>
       <span className="status-counts">
         {c && (
@@ -275,11 +281,13 @@ function BarreEtat({ status, demo }: { status: ShellStatus | null; demo: boolean
 }
 
 /** Cadre de l'application : bandeau, barre d'outils, menu latéral, contenu et barre d'état. */
-export function Shell(props: { children: ReactNode; nom: string; fonction: string; demo: boolean }) {
+export function Shell(props: { children: ReactNode; nom: string; fonction: string }) {
   const path = usePathname();
   const [actions, setActions] = useState<ShellActions | null>(null);
   const [status, setStatus] = useState<ShellStatus | null>(null);
   const [setters] = useState<Setters>(() => ({ setActions, setStatus }));
+  // Lecture des scans en arrière-plan, quelle que soit la page ouverte.
+  const lecture = useLecteurScans(path !== "/connexion");
 
   if (path === "/connexion") return <main className="login-page">{props.children}</main>;
 
@@ -292,7 +300,7 @@ export function Shell(props: { children: ReactNode; nom: string; fonction: strin
           <MenuLateral />
           <main className="app-main">{props.children}</main>
         </div>
-        <BarreEtat status={status} demo={props.demo} />
+        <BarreEtat status={status} lecture={lecture} />
       </div>
     </SettersCtx.Provider>
   );

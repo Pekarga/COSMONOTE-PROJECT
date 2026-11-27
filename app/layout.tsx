@@ -3,7 +3,6 @@ import "./globals.css";
 import { DropGuard } from "@/components/DropGuard";
 import { RegisterSW } from "@/components/RegisterSW";
 import { Shell } from "@/components/Shell";
-import { hasClaude } from "@/lib/config";
 import { getSetting } from "@/lib/db";
 
 export const metadata: Metadata = {
@@ -21,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <body>
-        <Shell nom={getSetting("nom") ?? ""} fonction={getSetting("fonction") ?? ""} demo={!hasClaude()}>
+        <Shell nom={getSetting("nom") ?? ""} fonction={getSetting("fonction") ?? ""}>
           {children}
         </Shell>
         <DropGuard />
