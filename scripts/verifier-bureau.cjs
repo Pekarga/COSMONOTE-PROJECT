@@ -120,20 +120,229 @@ async function verifierVolume(page) {
         `Je vous prie d'agréer, Monsieur le Directeur, l'assurance de ma considération distinguée.\n`,
     ),
   }));
+  await page.goto(new URL("/signes", page.url()).href);
+  await page.waitForLoadState("load");
+  // Courriers déjà là (scan, essai du modèle), plus les 300 déposés.
+  const attendus = 300 + (await page.evaluate(async () => (await (await fetch("/api/signes?limite=1")).json()).compteurs.total));
   const debut = Date.now();
   await page.locator(".lucarne input[type=file]").setInputFiles(fichiers);
   let c = null;
   for (let i = 0; i < 240; i++) {
     c = await page.evaluate(async () => (await (await fetch("/api/signes?limite=1")).json()).compteurs);
-    if (c.total >= 301 && !c.enCours && !c.aLire) break;
+    if (c.total >= attendus && !c.enCours && !c.aLire) break;
     await page.waitForTimeout(1000);
   }
   const duree = Math.round((Date.now() - debut) / 1000);
   const t = Date.now();
   const r = await page.evaluate(async () => (await (await fetch("/api/signes?q=virement%20korhogo")).json()).total);
   console.log(`\nVolume : ${c.total} courriers, ${c.prets} prêts en ${duree} s ; recherche « virement korhogo » : ${r} résultats en ${Date.now() - t} ms`);
-  if (c.prets < 301) return "les 300 courriers n'ont pas tous été lus";
+  if (c.prets < attendus) return "les 300 courriers n'ont pas tous été lus";
   if (r !== 43) return `la recherche donne ${r} résultats au lieu de 43`;
+  return null;
+}
+
+/** Courrier signé type, collé comme modèle de style pour l'essai du modèle de rédaction. */
+const MODELE_SIGNE = `MINISTERE DES FINANCES ET DU BUDGET
+______
+DIRECTION GENERALE DU BUDGET ET DES FINANCES
+______
+DIRECTION DU CONTROLE BUDGETAIRE
+______
+LE DIRECTEUR
+
+REPUBLIQUE DE COTE D'IVOIRE
+Union – Discipline – Travail
+
+N°______/MFB/DGBF/DCB/SDCBEPN
+
+Abidjan, le
+
+A
+Monsieur le Directeur
+du Centre Régional des Œuvres Universitaires de DALOA (CROU-D)
+
+D A L O A
+
+Objet : Demande de visa de la décision portant modification budgétaire
+
+Monsieur le Directeur,
+
+Par courrier N°0456/2026/CROU-D/D du 2 octobre 2026, vous avez soumis à mon visa la décision portant modification du budget de l'exercice 2026 de votre établissement.
+
+Après analyse, il ressort que cette modification consiste en un transfert de crédits de quatre millions (4 000 000) FCFA à l'intérieur de la nature de dépense « Biens et Services ».
+
+Au vu de ce qui précède, j'ai l'honneur de vous retourner, revêtue de mon visa, la décision susvisée.
+
+Je vous prie d'agréer, Monsieur le Directeur, l'assurance de ma considération distinguée.
+
+Ampliation :
+- Contrôleur Budgétaire CROU-D`;
+
+const COURRIER_RECU = `MINISTERE DE L'ENSEIGNEMENT SUPERIEUR ET DE LA RECHERCHE SCIENTIFIQUE
+CENTRE REGIONAL DES ŒUVRES UNIVERSITAIRES DE BOUAKE
+LE DIRECTEUR
+
+N°112/2026/MESRS/CROU-B/D/SDAF                Bouaké, le 3 novembre 2026
+
+A
+Monsieur le Directeur du Contrôle Budgétaire
+ABIDJAN
+
+Objet : Demande de visa de la décision portant modification du budget 2026
+
+Monsieur le Directeur,
+
+J'ai l'honneur de vous transmettre, pour visa, la décision N°07/2026/MESRS/CROU-B/D du 28 octobre 2026 portant modification de la ventilation du budget de l'exercice 2026 du CROU-B.
+
+Cette modification porte sur un montant de quinze millions (15 000 000) FCFA, transféré de la nature de dépense « Biens et Services » vers la nature de dépense « Investissement », afin de financer la réhabilitation du restaurant universitaire.
+
+Je vous saurais gré de bien vouloir procéder au visa de ladite décision dans les meilleurs délais.
+
+Veuillez agréer, Monsieur le Directeur, l'assurance de ma considération distinguée.
+
+Le Directeur`;
+
+const FICHE = `FICHE D'IMPUTATION
+Direction du Contrôle Budgétaire
+Courrier arrivée N°2026/1543 du 5 novembre 2026
+Expéditeur : CROU-B
+Imputé à : Sous-Direction du Contrôle des EPN
+Instruction du Directeur : Pour analyse et projet de réponse sous ma signature. Vérifier la conformité au regard des textes.
+Délai : 72 heures`;
+
+const secondes = (debut) => Math.round((Date.now() - debut) / 1000);
+
+/** Attend qu'une condition, évaluée dans la page, renvoie une valeur ; affiche l'avancement de temps en temps. */
+async function attendre(page, quoi, fn, arg, minutes) {
+  const fin = Date.now() + minutes * 60_000;
+  let dernier = 0;
+  for (;;) {
+    const r = await page.evaluate(fn, arg).catch((e) => ({ attente: `(page : ${e.message})` }));
+    if (r && r.fini) return r;
+    if (Date.now() > fin) throw new Error(`${quoi} : rien après ${minutes} min (${r && r.attente})`);
+    if (Date.now() - dernier > 30_000) {
+      dernier = Date.now();
+      console.log(`  … ${quoi} : ${r && r.attente}`);
+    }
+    await page.waitForTimeout(2000);
+  }
+}
+
+/**
+ * Modèle de rédaction : téléchargement depuis les Paramètres (comme chez l'utilisateur), analyse d'un dossier,
+ * rédaction du projet, puis une retouche. Le projet doit venir du modèle, pas des formules de repli.
+ */
+async function verifierModele(page) {
+  const origine = new URL(page.url()).origin;
+  await page.goto(`${origine}/reglages`);
+  await page.waitForSelector("#modele", { timeout: 30000 });
+  const debut = Date.now();
+  await page.locator("#modele").getByRole("button", { name: /Télécharger le modèle/ }).click();
+  await attendre(
+    page,
+    "téléchargement du modèle",
+    () => {
+      const t = document.querySelector("#modele")?.innerText ?? "";
+      return t.includes("est installé") ? { fini: true } : { attente: t.replace(/\s+/g, " ").slice(0, 220) };
+    },
+    null,
+    30,
+  );
+  console.log(`\nModèle téléchargé et vérifié en ${secondes(debut)} s`);
+
+  // Un courrier signé de référence, pris comme mise en page par défaut.
+  const signe = await page.evaluate(async (texte) => {
+    const f = new FormData();
+    f.append("texte", texte);
+    const r = await (await fetch("/api/signes", { method: "POST", body: f })).json();
+    return r.ids?.[0] ?? null;
+  }, MODELE_SIGNE);
+  await attendre(
+    page,
+    "lecture du courrier de référence",
+    async (id) => {
+      const s = (await (await fetch(`/api/signes/${id}`)).json()).signe;
+      return s?.status === "ready" ? { fini: true } : { attente: s?.status };
+    },
+    signe,
+    5,
+  );
+  await page.evaluate(async (id) => {
+    await fetch(`/api/signes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ defaut: true }) });
+  }, signe);
+
+  // Dossier imputé : analyse par le modèle.
+  let t = Date.now();
+  const dossierId = await page.evaluate(
+    async ({ recu, fiche }) => {
+      const f = new FormData();
+      f.append("file", new File([recu], "courrier-recu.txt", { type: "text/plain" }));
+      f.append("file", new File([fiche], "fiche-imputation.txt", { type: "text/plain" }));
+      return (await (await fetch("/api/dossiers", { method: "POST", body: f })).json()).id;
+    },
+    { recu: COURRIER_RECU, fiche: FICHE },
+  );
+  const analyse = await attendre(
+    page,
+    "analyse du dossier",
+    async (id) => {
+      const d = (await (await fetch(`/api/dossiers/${id}`)).json()).dossier;
+      if (d.status === "ready" || d.status === "error") return { fini: true, d };
+      return { attente: d.step };
+    },
+    dossierId,
+    25,
+  );
+  console.log(`\nAnalyse du dossier en ${secondes(t)} s :`, analyse.d.status, analyse.d.error ?? "");
+  console.log(JSON.stringify(analyse.d.analyse, null, 1).slice(0, 2500));
+  if (analyse.d.status !== "ready") return `analyse : ${analyse.d.error}`;
+  if (analyse.d.demo) return "l'analyse ne vient pas du modèle";
+
+  // Rédaction du projet de réponse.
+  t = Date.now();
+  const courrierId = await page.evaluate(async (id) => {
+    const r = await fetch(`/api/dossiers/${id}/rediger`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consignes: "Refuser le visa : un transfert de crédits vers la nature « Investissement » relève d'un arrêté du Ministre chargé du Budget.\nInviter le CROU-B à saisir le Ministre par la voie hiérarchique.",
+        ton: "courtois",
+        genre: "courrier",
+      }),
+    });
+    return (await r.json()).id;
+  }, dossierId);
+  const redige = await attendre(
+    page,
+    "rédaction du projet",
+    async (id) => {
+      const d = await (await fetch(`/api/courriers/${id}`)).json();
+      if (d.courrier.status !== "processing") return { fini: true, c: d.courrier };
+      return { attente: d.travail ? `${d.travail.libelle} ${d.travail.phase} ${d.travail.progression} %` : "en attente" };
+    },
+    courrierId,
+    30,
+  );
+  const c = redige.c;
+  console.log(`\nProjet rédigé en ${secondes(t)} s :`, c.status, c.error ?? "");
+  console.log(`Objet : ${c.objet}\n${c.destinataire}\n\n${c.appel}\n\n${c.corps}\n\n${c.politesse}\n\nAmpliation : ${c.ampliation}\nRemarques :\n- ${c.remarques.join("\n- ")}`);
+  if (c.status !== "ready") return `rédaction : ${c.error}`;
+  if (c.demo || c.remarques.some((r) => /n'a pas pu rédiger/.test(r))) return "le projet ne vient pas du modèle";
+  if (c.corps.length < 200) return "le projet est trop court";
+
+  // Retouche demandée en quelques mots.
+  t = Date.now();
+  const retouche = await page.evaluate(async (id) => {
+    const r = await fetch(`/api/courriers/${id}/retouche`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction: "Ajoute une phrase rappelant le délai de traitement de 72 heures fixé par le Directeur." }),
+    });
+    return { ok: r.ok, ...(await r.json()) };
+  }, courrierId);
+  console.log(`\nRetouche en ${secondes(t)} s :`, retouche.ok ? "faite" : retouche.error);
+  if (retouche.courrier) console.log(retouche.courrier.corps);
+  if (!retouche.ok) return `retouche : ${retouche.error}`;
   return null;
 }
 
@@ -165,18 +374,25 @@ async function verifierVolume(page) {
   if (texte.includes("Lucarne des dossiers imputés")) {
     const echec = await verifierScan(page).catch((e) => `lecture du scan : ${e.message}`);
     if (echec) erreurs.push(echec);
+    if (process.env.VERIFIER_MODELE === "1") {
+      const modele = await verifierModele(page).catch((e) => `modèle : ${e.message}`);
+      if (modele) erreurs.push(modele);
+    }
     const volume = await verifierVolume(page).catch((e) => `volume : ${e.message}`);
     if (volume) erreurs.push(volume);
   }
   await app.close().catch(() => {});
   const journal = path.join(dossier, "journal.txt");
-  if (fs.existsSync(journal)) console.log("\nJournal :\n" + fs.readFileSync(journal, "utf8").slice(-6000));
+  if (fs.existsSync(journal)) console.log("\nJournal :\n" + fs.readFileSync(journal, "utf8").slice(-12000));
   if (!texte.includes("Lucarne des dossiers imputés")) erreurs.push("l'accueil ne s'affiche pas");
   if (erreurs.length) {
     console.error("\nÉCHEC :\n- " + erreurs.join("\n- "));
     process.exit(1);
   }
-  console.log("\nL'appli démarre, affiche l'accueil sans erreur, lit un courrier scanné et tient 300 courriers d'un coup.");
+  console.log(
+    "\nL'appli démarre, affiche l'accueil sans erreur, lit un courrier scanné et tient 300 courriers d'un coup." +
+      (process.env.VERIFIER_MODELE === "1" ? " Le modèle de rédaction se télécharge, analyse, rédige et retouche." : ""),
+  );
 })().catch((e) => {
   console.error("ÉCHEC :", e);
   process.exit(1);

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { anyLogo, deleteCourrier, getCourrier, getSigne, updateCourrier } from "@/lib/db";
+import { travailEnCours } from "@/lib/modele";
 import { formeValide } from "@/lib/style";
 import type { Courrier } from "@/lib/types";
 
@@ -32,8 +33,11 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const courrier = getCourrier((await params).id);
   if (!courrier) return Response.json({ error: "Courrier introuvable." }, { status: 404 });
   const signe = courrier.signeId ? getSigne(courrier.signeId) : null;
+  // Rédaction par le modèle installé sur l'ordinateur : avancement, ou attente d'un autre travail.
+  const travail = courrier.status === "processing" ? travailEnCours() : null;
   return Response.json({
     courrier,
+    travail: travail ? { ...travail, ceCourrier: travail.cle === `courrier:${courrier.id}` } : null,
     images: { logo: Boolean(signe?.hasLogo), logoCommun: Boolean(anyLogo()), signature: Boolean(signe?.hasSignatureImg) },
   });
 }

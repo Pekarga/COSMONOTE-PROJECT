@@ -12,4 +12,12 @@ exports.default = async function afterPack(context) {
   fs.rmSync(target, { recursive: true, force: true });
   fs.cpSync(path.join(__dirname, "server-bundle"), target, { recursive: true });
   console.log("  • serveur embarqué copié dans", target);
+  // Serveur du modèle de rédaction (llama.cpp), téléchargé par le workflow dans desktop/llama.
+  const llama = path.join(__dirname, "llama");
+  const cible = path.join(resources, "llama");
+  fs.rmSync(cible, { recursive: true, force: true });
+  if (fs.existsSync(llama)) {
+    fs.cpSync(llama, cible, { recursive: true });
+    console.log("  • serveur du modèle copié dans", cible);
+  } else console.log("  • serveur du modèle absent (desktop/llama) : la rédaction passera par les formules");
 };

@@ -29,6 +29,7 @@ export default function DossiersPage() {
   const [total, setTotal] = useState(0);
   const [limite, setLimite] = useState(PAGE);
   const [compteurs, setCompteurs] = useState<SigneCompteurs | null>(null);
+  const [modeleInstalle, setModeleInstalle] = useState<boolean | null>(null);
   const [query, setQuery] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +57,9 @@ export default function DossiersPage() {
     fetch("/api/signes?limite=1")
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { compteurs: SigneCompteurs } | null) => setCompteurs(d?.compteurs ?? null));
+    fetch("/api/modele")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { installe: boolean } | null) => setModeleInstalle(d?.installe ?? null));
   }, []);
 
   async function deposer(files: File[]) {
@@ -228,6 +232,20 @@ export default function DossiersPage() {
             <UploadIcon size={15} /> {sansModele ? "Déposer mes courriers signés" : "Gérer les modèles"}
           </Link>
         </section>
+        {modeleInstalle === false && (
+          <section className="card panel compact">
+            <h2 className="panel-head clair">
+              <PenIcon size={20} /> Rédaction sur l&apos;ordinateur
+            </h2>
+            <p className="small">
+              Installez le modèle de rédaction (5,2 Go, une seule fois) : les projets seront rédigés comme vos courriers,
+              sans Internet.
+            </p>
+            <Link href="/reglages#modele" className="btn btn-sm">
+              Installer le modèle
+            </Link>
+          </section>
+        )}
         <section className="conseil">
           <BulbIcon size={26} />
           <div>

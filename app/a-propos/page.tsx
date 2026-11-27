@@ -11,7 +11,7 @@ export default function AProposPage() {
         <img src="/icon.svg" alt="" />
         <div>
           <h1>Rédacteur de Courriers Administratifs</h1>
-          <p className="muted">Le rédacteur, version 0.4.0</p>
+          <p className="muted">Le rédacteur, version 0.5.0</p>
         </div>
       </div>
       <p>
@@ -27,6 +27,8 @@ export default function AProposPage() {
       </ol>
       <p className="small muted">
         Tout se passe sur cet ordinateur, sans Internet : vos fichiers, la lecture des scans, l&apos;analyse et la rédaction.
+        La rédaction s&apos;appuie sur le modèle de langue Ministral 3 8B (Mistral AI, licence Apache 2.0), téléchargé une seule
+        fois depuis les Paramètres, et sur le moteur llama.cpp (licence MIT).
       </p>
     </section>
   );

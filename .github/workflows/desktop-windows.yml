@@ -9,6 +9,11 @@ on:
         description: "Version à publier (ex. 0.1.0). Laisser vide pour ne pas publier de release."
         required: false
         default: ""
+      modele:
+        description: "Essayer aussi le modèle de rédaction (téléchargement de 5,2 Go, puis une rédaction complète)."
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: write
@@ -16,6 +21,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -30,6 +36,32 @@ jobs:
           npm run build
           npm run desktop:prepare
 
+      # Moteur du modèle de rédaction : dernière version de llama.cpp pour Windows (processeur, x64),
+      # avec les bibliothèques d'exécution de Visual C++ pour les postes qui ne les ont pas.
+      - name: Ajouter le moteur du modèle (llama.cpp)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $rel = gh release view --repo ggml-org/llama.cpp --json tagName,assets | ConvertFrom-Json
+          $asset = $rel.assets | Where-Object { $_.name -match '^llama-.*-bin-win-cpu-x64\.zip$' } | Select-Object -First 1
+          if (-not $asset) { throw "Archive Windows de llama.cpp introuvable dans $($rel.tagName)" }
+          "llama.cpp $($rel.tagName) : $($asset.name)"
+          gh release download $rel.tagName --repo ggml-org/llama.cpp --pattern $asset.name --dir $env:RUNNER_TEMP
+          $tmp = Join-Path $env:RUNNER_TEMP "llama"
+          Expand-Archive (Join-Path $env:RUNNER_TEMP $asset.name) -DestinationPath $tmp -Force
+          $exe = Get-ChildItem $tmp -Recurse -Filter llama-server.exe | Select-Object -First 1
+          New-Item -ItemType Directory -Force desktop/llama | Out-Null
+          Copy-Item $exe.FullName desktop/llama/
+          Copy-Item (Join-Path $exe.DirectoryName "*.dll") desktop/llama/
+          foreach ($dll in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll", "vcomp140.dll", "concrt140.dll") {
+            $src = Join-Path $env:WINDIR "System32\$dll"
+            if ((Test-Path $src) -and -not (Test-Path "desktop/llama/$dll")) { Copy-Item $src desktop/llama/ }
+          }
+          Set-Content desktop/llama/VERSION.txt "llama.cpp $($rel.tagName)"
+          & desktop/llama/llama-server.exe --version
+          Get-ChildItem desktop/llama | Format-Table Name, Length -AutoSize
+
       - name: Construire l'installateur
         working-directory: desktop
         run: |
@@ -39,6 +71,8 @@ jobs:
       # Aucun installateur n'est publié si l'appli ne démarre pas ou si l'accueil affiche une erreur.
       - name: Vérifier que l'application démarre
         shell: pwsh
+        env:
+          VERIFIER_MODELE: ${{ (github.event_name != 'workflow_dispatch' || inputs.modele) && '1' || '0' }}
         run: |
           npm install --no-save --no-package-lock playwright@1.63.0
           $exe = (Get-ChildItem desktop/dist/win-unpacked -Filter "Le r*.exe" | Select-Object -First 1).FullName

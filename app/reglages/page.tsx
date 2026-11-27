@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
+import { ModeleLocal } from "@/components/ModeleLocal";
 import { toPng } from "@/components/upload";
 
 type Settings = {
@@ -116,6 +117,8 @@ export default function SettingsPage() {
             </div>
           </form>
         </section>
+
+        <ModeleLocal />
 
         <section className="card panel" id="armoiries">
           <h2 className="panel-head">Armoiries</h2>

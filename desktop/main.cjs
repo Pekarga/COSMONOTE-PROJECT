@@ -6,6 +6,7 @@ const http = require("node:http");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const { gererModele, arreterServeurModele } = require("./modele.cjs");
 
 // Dossier des données : %APPDATA%\Le redacteur sous Windows.
 app.setName("Le rédacteur");
@@ -13,6 +14,14 @@ app.setPath("userData", path.join(app.getPath("appData"), "Le redacteur"));
 
 let server = null;
 let win = null;
+let modele = null;
+
+// Modèle de rédaction : %APPDATA%\Le redacteur\modeles ; serveur llama.cpp livré avec l'appli.
+const MODELES_DIR = path.join(app.getPath("userData"), "modeles");
+const LLAMA_SERVER = path.join(
+  app.isPackaged ? path.join(process.resourcesPath, "llama") : path.join(__dirname, "llama"),
+  process.platform === "win32" ? "llama-server.exe" : "llama-server",
+);
 
 // Journal de démarrage : %APPDATA%\Le redacteur\journal.txt, pour comprendre un plantage.
 const JOURNAL = path.join(app.getPath("userData"), "journal.txt");
@@ -95,6 +104,8 @@ async function startServer() {
       PORT: String(port),
       HOSTNAME: "127.0.0.1",
       DATA_DIR: path.join(app.getPath("userData"), "data"),
+      MODELES_DIR,
+      LLAMA_SERVER,
     },
     // Sorties du serveur dans le journal (une appli Windows sans console n'a pas de sortie standard).
     stdio: ["ignore", "pipe", "pipe"],
@@ -105,6 +116,7 @@ async function startServer() {
   server.on("error", (err) => journal("serveur : lancement impossible", String(err)));
   server.on("exit", (code) => {
     journal("serveur : arrêt, code", String(code));
+    arreterServeurModele(MODELES_DIR, false);
     if (code && !app.isQuitting) {
       dialog.showErrorBox("Le rédacteur", `Le serveur s'est arrêté (code ${code}).`);
       app.quit();
@@ -184,6 +196,7 @@ async function createWindow() {
   );
   gererTelechargements(url);
   gererPdf(url);
+  modele = gererModele(MODELES_DIR, journal);
   ipcMain.on("quitter", () => app.quit());
   ipcMain.on("ouvrir-journal", () => shell.openPath(JOURNAL));
   win = new BrowserWindow({
@@ -270,7 +283,10 @@ if (!app.requestSingleInstanceLock()) {
     "Electron",
     process.versions.electron,
     fs.existsSync(SANS_GPU) ? "sans accélération graphique" : "",
+    fs.existsSync(LLAMA_SERVER) ? "" : "(serveur du modèle absent)",
   );
+  // Un serveur du modèle resté en marche après un arrêt brutal est arrêté.
+  arreterServeurModele(MODELES_DIR, true);
   app.whenReady().then(() =>
     createWindow().catch((err) => {
       journal("main : échec du démarrage", err && err.stack ? err.stack : String(err));
@@ -281,6 +297,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", () => {
     app.isQuitting = true;
+    if (modele) modele.arreter();
     if (server) server.kill();
+    arreterServeurModele(MODELES_DIR, false);
   });
 }

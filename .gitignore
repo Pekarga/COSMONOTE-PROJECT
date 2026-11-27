@@ -11,3 +11,4 @@ desktop/node_modules/
 desktop/dist/
 desktop/server-bundle/
 public/ocr/
+desktop/llama/

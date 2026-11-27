@@ -23,11 +23,17 @@ import {
   UndoIcon,
 } from "@/components/Icons";
 import { LetterSheet, type LetterFields } from "@/components/LetterSheet";
+import { texteTravail, type InfosModele } from "@/components/modele";
 import { useShellActions, useShellStatus } from "@/components/Shell";
 import { GENRES, POLICES, aujourdhui, refsPourNouveauCourrier } from "@/lib/style";
+import type { Travail } from "@/lib/modele";
 import type { Courrier, MiseEnForme, Signe, SigneSummary } from "@/lib/types";
 
-type Data = { courrier: Courrier; images: { logo: boolean; logoCommun?: boolean; signature: boolean } };
+type Data = {
+  courrier: Courrier;
+  travail?: (Travail & { ceCourrier: boolean }) | null;
+  images: { logo: boolean; logoCommun?: boolean; signature: boolean };
+};
 type Etat = { fields: LetterFields; forme: MiseEnForme };
 
 const CHAMPS: (keyof LetterFields)[] = [
@@ -80,6 +86,7 @@ export default function CourrierPage() {
   const [instruction, setInstruction] = useState("");
   const [retouche, setRetouche] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
+  const [avancement, setAvancement] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [apercu, setApercu] = useState(false);
   const [modeles, setModeles] = useState<SigneSummary[]>([]);
@@ -267,6 +274,27 @@ export default function CourrierPage() {
     setInfo(`Mise en page de « ${m.objet || m.nomFichier} » appliquée.`);
   }
 
+  // Retouche par le modèle installé sur l'ordinateur : on affiche où il en est.
+  useEffect(() => {
+    if (!retouche) {
+      setAvancement(null);
+      return;
+    }
+    let fini = false;
+    const suivre = async () => {
+      const r = (await fetch("/api/modele")
+        .then((x) => (x.ok ? x.json() : null))
+        .catch(() => null)) as InfosModele | null;
+      if (!fini) setAvancement(r?.travail && r.travail.cle === `retouche:${id}` ? texteTravail(r.travail) : null);
+    };
+    const t = setInterval(suivre, 2000);
+    suivre();
+    return () => {
+      fini = true;
+      clearInterval(t);
+    };
+  }, [retouche, id]);
+
   async function retoucher(texte: string) {
     if (!texte.trim()) return;
     await flush();
@@ -330,7 +358,21 @@ export default function CourrierPage() {
       <div className="card processing">
         <span className="spinner" />
         <h2>{note ? "Rédaction de la note…" : "Rédaction du projet de réponse…"}</h2>
-        <p className="muted">Le rédacteur s&apos;appuie sur l&apos;analyse du dossier, vos consignes et vos courriers signés.</p>
+        {data.travail?.ceCourrier ? (
+          <>
+            <p className="muted">
+              {data.travail.libelle} sur l&apos;ordinateur : {texteTravail(data.travail)}. Comptez quelques minutes ; vous pouvez
+              continuer à travailler.
+            </p>
+            <div className="progress progress-large">
+              <div style={{ width: `${data.travail.progression}%` }} />
+            </div>
+          </>
+        ) : data.travail ? (
+          <p className="muted">En attente : le modèle de rédaction termine un autre travail.</p>
+        ) : (
+          <p className="muted">Le rédacteur s&apos;appuie sur l&apos;analyse du dossier, vos consignes et vos courriers signés.</p>
+        )}
       </div>
     );
   }
@@ -548,7 +590,9 @@ export default function CourrierPage() {
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               placeholder={
-                retouche ? "Retouche en cours…" : "Demander une retouche : ton plus ferme, citer l'article 64, raccourcir…"
+                retouche
+                  ? `Retouche en cours${avancement ? ` : ${avancement}` : "…"}`
+                  : "Demander une retouche : ton plus ferme, citer l'article 64, raccourcir…"
               }
               disabled={retouche}
               aria-label="Retouche"

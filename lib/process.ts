@@ -19,6 +19,8 @@ import { analyserDossierClaude, analyserSigneClaude, redigerClaude, retoucherCla
 import { docxLogo, docxPied, fileKind, imageMime, readText } from "./extract";
 import { enFile } from "./file-attente";
 import { readOcr, sansTexte } from "./files";
+import { analyserDossierLocal, redigerLocal, retoucherLocal, type PieceTexte } from "./local";
+import { modeleDisponible, type Travail } from "./modele";
 import { FILES_DIR } from "./paths";
 import { REGLES_RELECTURE, bilan, consigneSecondePasse, enRemarques, nettoyerCourrier, relireCourrier } from "./relecture";
 import { dateLongue, miseEnPage } from "./style";
@@ -175,12 +177,23 @@ export async function processDossier(id: string): Promise<void> {
       return;
     }
     updateDossier(id, { status: "processing", step: "Analyse du dossier", error: null });
-    let analyse: Analyse;
+    let analyse: Analyse | null = null;
     let demo = false;
     if (hasClaude()) {
       const { blocks, notes } = await piecesBlocks(pieces);
       analyse = await analyserDossierClaude(blocks, choisirModeles("", dossier.signeId));
       analyse.pointsAVerifier.push(...notes);
+    } else if (modeleDisponible()) {
+      try {
+        analyse = await analyserDossierLocal(`dossier:${id}`, piecesTexte(pieces), choisirModeles("", dossier.signeId), (t) =>
+          updateDossier(id, { step: etapeModele(t) }),
+        );
+      } catch (err) {
+        console.error("[processDossier] modèle", err);
+        analyse = analyserDossierDemo(pieces);
+        analyse.pointsAVerifier.unshift(`Le modèle de rédaction n'a pas pu analyser le dossier (${message(err)}) : analyse sommaire, à compléter.`);
+        demo = true;
+      }
     } else {
       analyse = analyserDossierDemo(pieces);
       demo = true;
@@ -198,6 +211,16 @@ export async function processDossier(id: string): Promise<void> {
     console.error("[processDossier]", err);
     updateDossier(id, { status: "error", step: null, error: message(err) });
   }
+}
+
+/** Texte d'avancement d'un travail du modèle, affiché dans le dossier. */
+function etapeModele(t: Travail): string {
+  if (t.phase === "demarrage") return `${t.libelle} : démarrage du modèle sur l'ordinateur`;
+  return `${t.libelle} sur l'ordinateur : ${t.progression} %`;
+}
+
+function piecesTexte(pieces: Piece[]): PieceTexte[] {
+  return pieces.map((p) => ({ nom: p.nom, role: p.role, texte: p.texte }));
 }
 
 /* ───────────── Rédaction ───────────── */
@@ -270,23 +293,32 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
     const pieces = listPiecesWithPath(dossierId);
     const pj = pieces.filter((p) => p.role === "justificatif" && p.joindre).map((p) => sansExtension(p.nom));
     const signe = courrier.signeId ? getSigne(courrier.signeId) : null;
-    let redaction: Redaction;
+    let redaction: Redaction | null = null;
     let demo = false;
+    let echecModele: string | null = null;
+    const modeles = () => choisirModeles(courrier.genre === "note" ? "note" : (dossier.analyse?.typeReponse ?? ""), courrier.signeId);
+    const demande = {
+      genre: courrier.genre,
+      analyse: dossier.analyse,
+      consignes: dossier.consignes,
+      ton: dossier.ton,
+      pj,
+      miseEnPage: { entete: courrier.entete, signature: courrier.signature, destinataire: courrier.destinataire },
+      date: courrier.date ? dateLongue(courrier.date) : "",
+    };
     if (hasClaude()) {
       const { blocks, notes } = await piecesBlocks(pieces);
-      redaction = await redigerClaude({
-        genre: courrier.genre,
-        pieces: blocks,
-        analyse: dossier.analyse,
-        consignes: dossier.consignes,
-        ton: dossier.ton,
-        pj,
-        modeles: choisirModeles(courrier.genre === "note" ? "note" : (dossier.analyse?.typeReponse ?? ""), courrier.signeId),
-        miseEnPage: { entete: courrier.entete, signature: courrier.signature, destinataire: courrier.destinataire },
-        date: courrier.date ? dateLongue(courrier.date) : "",
-      });
+      redaction = await redigerClaude({ ...demande, modeles: modeles(), pieces: blocks });
       redaction.remarques.push(...notes);
-    } else {
+    } else if (modeleDisponible()) {
+      try {
+        redaction = await redigerLocal(`courrier:${courrierId}`, { ...demande, modeles: modeles(), pieces: piecesTexte(pieces) });
+      } catch (err) {
+        console.error("[processCourrier] modèle", err);
+        echecModele = message(err);
+      }
+    }
+    if (!redaction) {
       redaction = redigerDemo({
         genre: courrier.genre,
         analyse: dossier.analyse,
@@ -303,12 +335,13 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
           : null,
         pj,
       });
+      if (echecModele) redaction.remarques.unshift(`Le modèle de rédaction n'a pas pu rédiger ce projet (${echecModele}).`);
+      else if (!hasClaude()) {
+        redaction.remarques.push("Pour des projets entièrement rédigés, installez le modèle de rédaction dans Paramètres (une seule fois, 5,2 Go).");
+      }
       demo = true;
     }
-    redaction = await relireProjet(
-      redaction,
-      hasClaude() ? choisirModeles(courrier.genre === "note" ? "note" : (dossier.analyse?.typeReponse ?? ""), courrier.signeId) : null,
-    );
+    redaction = await relireProjet(redaction, !demo ? modeles() : null, `courrier:${courrierId}`);
     // Pour une note, la ligne « NOTE A … » posée à la création est conservée.
     if (courrier.genre === "note" && courrier.destinataire) redaction.destinataire = courrier.destinataire;
     updateCourrier(courrierId, { ...redactionVersCourrier(redaction), status: "ready", error: null, demo });
@@ -325,17 +358,16 @@ const TITRES_RELECTURE = REGLES_RELECTURE.map((r) => `${r.titre} : `);
  * Relecture du projet : corrections sûres (guillemets, tirets, formules de remplissage), puis repérage
  * des tournures qui sonnent « texte généré ». Avec une clé Claude, une seconde passe les corrige.
  */
-async function relireProjet(r: Redaction, secondePasse: Signe[] | null): Promise<Redaction> {
+async function relireProjet(r: Redaction, secondePasse: Signe[] | null, cle = ""): Promise<Redaction> {
   const remarques = r.remarques.filter((x) => !TITRES_RELECTURE.some((t) => x.startsWith(t)));
   let propre = nettoyerCourrier(r);
   let constats = relireCourrier(propre);
   if (secondePasse && bilan(constats).aCorriger > 0) {
     try {
-      const revu = await retoucherClaude({
-        courrier: propre,
-        instruction: `Relis ce projet et corrige ce qui trahit encore une rédaction par IA. Garde les références, les dates, les montants, le destinataire et le sens ; n'ajoute aucun fait ; ne touche pas aux formules tirées des courriers signés.\n\n${consigneSecondePasse(propre, constats)}`,
-        modeles: secondePasse,
-      });
+      const instruction = `Relis ce projet et corrige ce qui trahit encore une rédaction par IA. Garde les références, les dates, les montants, le destinataire et le sens ; n'ajoute aucun fait ; ne touche pas aux formules tirées des courriers signés.\n\n${consigneSecondePasse(propre, constats)}`;
+      const revu = hasClaude()
+        ? await retoucherClaude({ courrier: propre, instruction, modeles: secondePasse })
+        : await retoucherLocal(cle, { courrier: propre, instruction, modeles: secondePasse, libelle: "Relecture du projet" });
       propre = nettoyerCourrier(revu);
       constats = relireCourrier(propre);
     } catch (err) {
@@ -355,6 +387,16 @@ export async function retoucher(courrier: Courrier, instruction: string): Promis
       courrier: actuel,
       instruction,
       modeles: choisirModeles(dossier?.analyse?.typeReponse ?? "", courrier.signeId),
+    });
+    updateCourrier(courrier.id, { ...redactionVersCourrier(await relireProjet(r, null)), demo: false });
+    return null;
+  }
+  if (modeleDisponible()) {
+    const dossier = courrier.dossierId ? getDossier(courrier.dossierId) : null;
+    const r = await retoucherLocal(`retouche:${courrier.id}`, {
+      courrier: actuel,
+      instruction,
+      modeles: choisirModeles(courrier.genre === "note" ? "note" : (dossier?.analyse?.typeReponse ?? ""), courrier.signeId),
     });
     updateCourrier(courrier.id, { ...redactionVersCourrier(await relireProjet(r, null)), demo: false });
     return null;
