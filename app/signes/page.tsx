@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
 import { LetterIcon, StarIcon, UploadIcon } from "@/components/Icons";
 import { formatDate } from "@/components/time";
-import { prepareFiles, uploadForm } from "@/components/upload";
+import { relireSignes, sansCle } from "@/components/ocr";
+import { joindreFichiers, uploadForm } from "@/components/upload";
 import { GENRES } from "@/lib/style";
 import type { SigneSummary } from "@/lib/types";
 
@@ -15,6 +16,9 @@ export default function SignesPage() {
   const [error, setError] = useState<string | null>(null);
   const [coller, setColler] = useState(false);
   const [texte, setTexte] = useState("");
+  const [lecture, setLecture] = useState<string | null>(null);
+  const [relecture, setRelecture] = useState<string | null>(null);
+  const [demo, setDemo] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/signes");
@@ -24,6 +28,7 @@ export default function SignesPage() {
 
   useEffect(() => {
     load();
+    sansCle().then(setDemo);
   }, [load]);
 
   useEffect(() => {
@@ -54,9 +59,35 @@ export default function SignesPage() {
   }
 
   async function deposer(files: File[]) {
+    setError(null);
+    setMessage(null);
     const form = new FormData();
-    for (const f of await prepareFiles(files)) form.append("file", f);
+    try {
+      await joindreFichiers(form, files, setLecture);
+    } finally {
+      setLecture(null);
+    }
     await envoyer(form);
+  }
+
+  async function relireErreurs() {
+    const enErreur = (signes ?? []).filter((s) => s.status === "error");
+    setError(null);
+    setMessage(null);
+    setRelecture("Préparation…");
+    try {
+      const n = await relireSignes(enErreur, (m) => setRelecture(m ?? "Analyse des courriers…"));
+      if (demo && n < enErreur.length) {
+        setMessage(
+          n
+            ? `${n} scan${n > 1 ? "s" : ""} lu${n > 1 ? "s" : ""} sur ${enErreur.length}. Pour les autres, déposez une version Word ou un PDF plus net.`
+            : "Aucun texte n'a pu être lu sur ces fichiers. Déposez une version Word, ou un scan plus net.",
+        );
+      }
+    } finally {
+      await load();
+      setRelecture(null);
+    }
   }
 
   async function defaut(s: SigneSummary) {
@@ -70,6 +101,7 @@ export default function SignesPage() {
 
   const prets = signes?.filter((s) => s.status === "ready") ?? [];
   const notes = prets.filter((s) => s.genre === "note").length;
+  const enErreur = signes?.filter((s) => s.status === "error").length ?? 0;
 
   return (
     <>
@@ -85,11 +117,17 @@ export default function SignesPage() {
         <DropZone
           className="lucarne"
           onFiles={deposer}
-          disabled={progress !== null}
+          disabled={progress !== null || lecture !== null || relecture !== null}
           icon={<UploadIcon size={30} />}
           title="Déposez ici tous vos courriers signés"
           hint="Plusieurs fichiers à la fois : Word (.docx) de préférence, PDF, ou photos et scans."
         />
+        {lecture && (
+          <div className="upload-strip">
+            <span className="spinner" />
+            <span>{lecture}</span>
+          </div>
+        )}
         {progress !== null && (
           <div className="upload-strip">
             <span>Envoi… {progress}%</span>
@@ -148,6 +186,25 @@ export default function SignesPage() {
             ? "L'étoile marque la mise en page utilisée par défaut."
             : "Cliquez sur une étoile pour choisir la mise en page par défaut ; sinon, Le rédacteur prend le modèle le plus complet."}
           </p>
+        )}
+
+        {(enErreur > 0 || relecture) && (
+          <div className="info-box relire-box">
+            <span>
+              {enErreur} courrier{enErreur > 1 ? "s n'ont" : " n'a"} pas pu être lu{enErreur > 1 ? "s" : ""}
+              {demo ? " : ce sont sans doute des scans. Le rédacteur peut les lire sur cet ordinateur, sans Internet ni clé." : "."}
+            </span>
+            {relecture ? (
+              <span className="upload-strip">
+                <span className="spinner" />
+                <span>{relecture}</span>
+              </span>
+            ) : (
+              <button className="btn btn-primary btn-sm" onClick={relireErreurs} disabled={lecture !== null || progress !== null}>
+                {demo ? "Lire les scans sur cet ordinateur" : "Relire ces courriers"}
+              </button>
+            )}
+          </div>
         )}
 
         {signes === null ? (

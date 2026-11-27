@@ -1,10 +1,18 @@
 import { createPiece, updatePiece } from "./db";
 import { fileKind, readText } from "./extract";
-import { extOf, writeUpload } from "./files";
+import { extOf, sansTexte, writeOcr, writeUpload } from "./files";
 import type { PieceRole } from "./types";
 
-/** Enregistre des fichiers dans un dossier et lit leur texte. Renvoie les noms refusés. */
-export async function ajouterPieces(dossierId: string, files: File[], role: PieceRole): Promise<string[]> {
+/**
+ * Enregistre des fichiers dans un dossier et lit leur texte. Pour un scan ou une photo, on garde
+ * le texte lu sur l'ordinateur (OCR) s'il a été envoyé. Renvoie les noms refusés.
+ */
+export async function ajouterPieces(
+  dossierId: string,
+  files: File[],
+  role: PieceRole,
+  ocr: Map<string, string> = new Map(),
+): Promise<string[]> {
   const refuses: string[] = [];
   for (const f of files) {
     const kind = fileKind(f.name, f.type);
@@ -21,7 +29,13 @@ export async function ajouterPieces(dossierId: string, files: File[], role: Piec
       taille: f.size,
     });
     await writeUpload(f, chemin);
-    if (kind !== "image") updatePiece(id, { texte: await readText(chemin, kind) });
+    let texte = kind === "image" ? "" : await readText(chemin, kind);
+    const lu = ocr.get(f.name);
+    if (lu && sansTexte(texte)) {
+      texte = lu;
+      await writeOcr(chemin, lu);
+    }
+    if (texte) updatePiece(id, { texte });
   }
   return refuses;
 }

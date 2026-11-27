@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackIcon, OpenIcon, RefreshIcon, StarIcon, TrashIcon } from "@/components/Icons";
 import { LetterSheet } from "@/components/LetterSheet";
+import { relireSignes, sansCle } from "@/components/ocr";
 import { toPng, uploadForm } from "@/components/upload";
 import { GENRES } from "@/lib/style";
 import type { Genre, Signe } from "@/lib/types";
@@ -36,6 +37,8 @@ export default function SignePage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [lecture, setLecture] = useState<string | null>(null);
+  const [demo, setDemo] = useState(false);
   const pending = useRef<Record<string, unknown>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -48,6 +51,7 @@ export default function SignePage() {
 
   useEffect(() => {
     load();
+    sansCle().then(setDemo);
   }, [load]);
 
   useEffect(() => {
@@ -87,6 +91,19 @@ export default function SignePage() {
       body: JSON.stringify(body),
     });
     if (res.ok) setSigne(((await res.json()) as { signe: Signe }).signe);
+  }
+
+  /** Relit le fichier d'origine ; sans clé, un scan est d'abord lu sur l'ordinateur. */
+  async function relire() {
+    if (!signe) return;
+    await flush();
+    setLecture("Préparation…");
+    try {
+      await relireSignes([signe], setLecture);
+    } finally {
+      setLecture(null);
+      await load();
+    }
   }
 
   async function image(kind: "logo" | "signature", file: File | null) {
@@ -175,9 +192,16 @@ export default function SignePage() {
       {signe.status === "error" && (
         <div className="card panel">
           <div className="error-box">{signe.error}</div>
-          <button className="btn" onClick={() => action({ relire: true })}>
-            <RefreshIcon size={15} /> Relire le courrier
-          </button>
+          {lecture ? (
+            <div className="upload-strip">
+              <span className="spinner" />
+              <span>{lecture}</span>
+            </div>
+          ) : (
+            <button className="btn btn-primary" onClick={relire}>
+              <RefreshIcon size={15} /> {demo ? "Lire les scans sur cet ordinateur" : "Relire le courrier"}
+            </button>
+          )}
         </div>
       )}
 
@@ -298,8 +322,8 @@ export default function SignePage() {
                 </label>
               ))}
               <div className="toolbar">
-                <button className="btn btn-ghost btn-sm" onClick={() => action({ relire: true })}>
-                  <RefreshIcon size={15} /> Relire le fichier d&apos;origine
+                <button className="btn btn-ghost btn-sm" onClick={relire} disabled={lecture !== null}>
+                  <RefreshIcon size={15} /> {lecture ?? "Relire le fichier d'origine"}
                 </button>
               </div>
             </div>

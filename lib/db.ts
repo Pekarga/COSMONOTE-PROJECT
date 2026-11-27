@@ -153,7 +153,9 @@ function update(table: string, columns: Record<string, string>, id: string, patc
 }
 
 function removeFile(p: unknown) {
-  if (p) fs.rm(String(p), { force: true, recursive: true }, () => {});
+  if (!p) return;
+  fs.rm(String(p), { force: true, recursive: true }, () => {});
+  fs.rm(`${String(p)}.ocr.txt`, { force: true }, () => {});
 }
 
 /* ───────────── Réglages ───────────── */

@@ -76,7 +76,8 @@ export default function SettingsPage() {
           <h2 className="panel-head">Rédaction par l&apos;IA (Claude)</h2>
           <p className="small muted">
             Sans clé, Le rédacteur fonctionne en mode démo : il reprend la mise en page et les formules de vos courriers signés et
-            construit le projet à partir de vos consignes, mais il ne lit pas les photos et les scans, et le texte reste simple.
+            construit le projet à partir de vos consignes. Il lit les photos et les scans sur cet ordinateur, sans Internet ; vérifiez
+            ce texte, car un scan pâle ou de travers se lit moins bien. La rédaction reste simple.
             Avec une clé Claude, il lit tout le dossier, analyse la demande et rédige dans votre style. Créez une clé sur{" "}
             <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
               console.anthropic.com

@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { createSigne, listSignes } from "@/lib/db";
 import { UNSUPPORTED_MESSAGE, fileKind } from "@/lib/extract";
-import { extOf, filesFrom, writeUpload } from "@/lib/files";
+import { extOf, filesFrom, ocrFrom, writeOcr, writeUpload } from "@/lib/files";
 import { processSigne } from "@/lib/process";
 
 export const runtime = "nodejs";
@@ -28,11 +28,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: UNSUPPORTED_MESSAGE }, { status: 400 });
   }
 
+  const ocr = ocrFrom(form);
   const ids: string[] = [];
   for (const f of files) {
     if (!fileKind(f.name, f.type)) continue;
     const { id, chemin } = createSigne({ nomFichier: f.name, mime: f.type || null, ext: extOf(f.name) });
     await writeUpload(f, chemin);
+    const lu = ocr.get(f.name);
+    if (lu) await writeOcr(chemin, lu);
     ids.push(id);
   }
   if (texte) {

@@ -361,7 +361,11 @@ export function analyserDossierDemo(pieces: { nom: string; role: string; texte: 
 
   const points = [
     "Mode démo : cette analyse repère des mots-clés. Ajoutez votre clé Claude dans les Paramètres pour une vraie analyse.",
-    ...(sansTexte.length ? [`Pièces non lues en mode démo (photos ou scans) : ${sansTexte.join(", ")}.`] : []),
+    ...(sansTexte.length
+      ? [
+          `Pièces dont le texte n'a pas été lu (photo ou scan) : ${sansTexte.join(", ")}. Retirez-les puis déposez-les de nouveau pour les lire sur cet ordinateur, ou déposez une version plus nette.`,
+        ]
+      : []),
     demandeur ? "Vérifier le destinataire de la réponse." : "Compléter le destinataire de la réponse.",
     dateTexte ? "" : "Retrouver la date du courrier reçu.",
     ref ? "" : "Retrouver le numéro du courrier reçu.",

@@ -16,7 +16,7 @@ import {
   TrashIcon,
 } from "@/components/Icons";
 import { formatDate } from "@/components/time";
-import { prepareFiles, uploadForm } from "@/components/upload";
+import { joindreFichiers, uploadForm } from "@/components/upload";
 import type { Dossier, Genre, Piece, PieceRole, SigneSummary, Ton } from "@/lib/types";
 
 type CourrierLigne = {
@@ -75,6 +75,7 @@ export default function DossierPage() {
   const [genre, setGenre] = useState<Genre>("courrier");
   const [signeId, setSigneId] = useState<string>("");
   const [envoi, setEnvoi] = useState<{ role: PieceRole; pct: number } | null>(null);
+  const [lecture, setLecture] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [redaction, setRedaction] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -125,7 +126,12 @@ export default function DossierPage() {
     setEnvoi({ role, pct: 0 });
     const form = new FormData();
     form.append("role", role);
-    for (const f of await prepareFiles(files)) form.append("file", f);
+    setLecture("Préparation des fichiers…");
+    try {
+      await joindreFichiers(form, files, setLecture);
+    } finally {
+      setLecture(null);
+    }
     try {
       const r = await uploadForm<{ message: string | null; refuses: string[] }>(`/api/dossiers/${id}/pieces`, form, (pct) =>
         setEnvoi({ role, pct }),
@@ -287,7 +293,7 @@ export default function DossierPage() {
               compact
               onFiles={(f) => ajouter(f, "dossier")}
               disabled={envoi !== null}
-              title={envoi?.role === "dossier" ? `Envoi… ${envoi.pct}%` : "Ajouter des pièces au dossier"}
+              title={envoi?.role === "dossier" ? (lecture ?? `Envoi… ${envoi.pct}%`) : "Ajouter des pièces au dossier"}
               hint="Courrier reçu, fiche d'imputation, décision…"
             />
           </section>
@@ -308,7 +314,7 @@ export default function DossierPage() {
               compact
               onFiles={(f) => ajouter(f, "justificatif")}
               disabled={envoi !== null}
-              title={envoi?.role === "justificatif" ? `Envoi… ${envoi.pct}%` : "Ajouter des pièces justificatives"}
+              title={envoi?.role === "justificatif" ? (lecture ?? `Envoi… ${envoi.pct}%`) : "Ajouter des pièces justificatives"}
             />
           </section>
         </aside>

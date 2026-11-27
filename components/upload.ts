@@ -1,3 +1,5 @@
+import { ajouterTexteDesScans } from "./ocr";
+
 /** Envoie un formulaire en suivant la progression. Renvoie la réponse JSON. */
 export function uploadForm<T = Record<string, unknown>>(
   url: string,
@@ -49,4 +51,14 @@ export async function toPng(source: File, max = 1200): Promise<File> {
 /** Prépare les fichiers déposés : les photos sont réduites, le reste part tel quel. */
 export async function prepareFiles(files: File[]): Promise<File[]> {
   return Promise.all(files.map((f) => (/^image\/(jpeg|png|webp)$/.test(f.type) ? shrinkImage(f).catch(() => f) : f)));
+}
+
+/**
+ * Met les fichiers déposés dans le formulaire. Sans clé Claude, le texte des scans et des photos
+ * est d'abord lu sur l'ordinateur (sans Internet) et envoyé avec eux.
+ */
+export async function joindreFichiers(form: FormData, files: File[], etat?: (message: string | null) => void): Promise<void> {
+  const prets = await prepareFiles(files);
+  for (const f of prets) form.append("file", f);
+  await ajouterTexteDesScans(form, prets, etat);
 }

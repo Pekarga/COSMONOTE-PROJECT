@@ -16,6 +16,7 @@ import {
 import { analyserDossierDemo, analyserSigneDemo, redigerDemo, retoucherDemo } from "./demo";
 import { analyserDossierClaude, analyserSigneClaude, redigerClaude, retoucherClaude, type Block } from "./claude";
 import { docxLogo, docxPied, fileKind, imageMime, readText } from "./extract";
+import { readOcr, sansTexte } from "./files";
 import { FILES_DIR } from "./paths";
 import { REGLES_RELECTURE, bilan, consigneSecondePasse, enRemarques, nettoyerCourrier, relireCourrier } from "./relecture";
 import { dateLongue, miseEnPage } from "./style";
@@ -36,7 +37,16 @@ export async function processSigne(id: string): Promise<void> {
     if (!signe || !files?.chemin) return;
     const kind = fileKind(signe.nomFichier, signe.mime);
     if (!kind) throw new Error("Format non pris en charge.");
-    const texte = kind === "image" ? "" : await readText(files.chemin, kind);
+    let texte = kind === "image" ? "" : await readText(files.chemin, kind);
+    // Scan ou photo : texte lu sur l'ordinateur par reconnaissance de caractères, s'il existe.
+    let parOcr = false;
+    if (sansTexte(texte)) {
+      const lu = await readOcr(files.chemin);
+      if (lu) {
+        texte = lu;
+        parOcr = true;
+      }
+    }
     const pied = kind === "docx" ? await docxPied(files.chemin) : "";
 
     if (kind === "docx") {
@@ -76,12 +86,21 @@ export async function processSigne(id: string): Promise<void> {
       return;
     }
 
-    if (!texte) {
+    if (sansTexte(texte)) {
       throw new Error(
-        "En mode démo, Le rédacteur ne lit pas les photos ni les PDF scannés. Ajoutez votre clé Claude dans les Paramètres, ou déposez ce courrier en Word ou en PDF contenant du texte.",
+        "Ce courrier est un scan ou une photo, et son texte n'a pas encore été lu. Cliquez sur « Lire les scans sur cet ordinateur » : la lecture se fait sans Internet et sans clé.",
       );
     }
-    updateSigne(id, { ...analyserSigneDemo(texte), pied, texte, status: "ready", error: null, demo: true });
+    const lu = analyserSigneDemo(texte);
+    if (parOcr) {
+      lu.resume = [
+        lu.resume,
+        "Texte lu sur le scan par reconnaissance de caractères : vérifiez l'en-tête et les formules dans « Réglages du modèle ».",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+    updateSigne(id, { ...lu, pied, texte, status: "ready", error: null, demo: true });
   } catch (err) {
     console.error("[processSigne]", err);
     updateSigne(id, { status: "error", error: message(err) });

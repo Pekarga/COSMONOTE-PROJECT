@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
-import { deleteSigne, getSigne, setDefaultSigne, updateSigne } from "@/lib/db";
+import { deleteSigne, getSigne, getSigneFiles, setDefaultSigne, updateSigne } from "@/lib/db";
+import { writeOcr } from "@/lib/files";
 import { processSigne } from "@/lib/process";
 import type { Signe } from "@/lib/types";
 
@@ -42,6 +43,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.defaut === true) setDefaultSigne(id);
   if (body.relire === true) {
+    // Texte d'un scan lu sur l'ordinateur (OCR), gardé à côté du fichier.
+    const files = getSigneFiles(id);
+    if (typeof body.ocr === "string" && body.ocr.trim() && files?.chemin) await writeOcr(files.chemin, body.ocr.slice(0, 300_000));
     updateSigne(id, { status: "processing", error: null });
     void processSigne(id);
   }

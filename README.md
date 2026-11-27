@@ -20,7 +20,7 @@ Windows peut afficher « Windows a protégé votre ordinateur », car l'installa
 
 ## Mode démo et rédaction par Claude
 
-Sans clé d'API, l'application fonctionne en **mode démo** : elle lit les courriers Word, les PDF texte et les fichiers texte, reprend la mise en page et les formules de vos modèles et assemble le projet à partir de vos consignes. Elle ne lit pas les photos ni les scans.
+Sans clé d'API, l'application fonctionne en **mode démo** : elle lit les courriers Word, les PDF texte et les fichiers texte, reprend la mise en page et les formules de vos modèles et assemble le projet à partir de vos consignes. Les photos et les PDF scannés sont lus sur l'ordinateur, sans Internet ni clé, par reconnaissance de caractères (Tesseract, en français) ; un scan pâle ou de travers se lit moins bien.
 
 Avec une clé Claude (page **Paramètres**, ou variable `ANTHROPIC_API_KEY`), elle lit tout le dossier, scans compris, analyse la demande et rédige dans votre style, puis fait une seconde relecture.
 

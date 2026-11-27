@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { createDossier, defaultSigne, deleteDossier, listDossiers, listPieces, updateDossier } from "@/lib/db";
 import { UNSUPPORTED_MESSAGE } from "@/lib/extract";
-import { filesFrom, frDate } from "@/lib/files";
+import { filesFrom, frDate, ocrFrom } from "@/lib/files";
 import { ajouterPieces } from "@/lib/pieces";
 import { processDossier } from "@/lib/process";
 
@@ -31,9 +31,10 @@ export async function POST(req: NextRequest) {
   const titre = String(form.get("titre") ?? "").trim() || (libre ? `Courrier du ${frDate()}` : `Dossier du ${frDate()}`);
   const id = createDossier(titre);
   updateDossier(id, { signeId: defaultSigne()?.id ?? null });
+  const ocr = ocrFrom(form);
   const refuses = [
-    ...(await ajouterPieces(id, pieces, "dossier")),
-    ...(await ajouterPieces(id, justificatifs, "justificatif")),
+    ...(await ajouterPieces(id, pieces, "dossier", ocr)),
+    ...(await ajouterPieces(id, justificatifs, "justificatif", ocr)),
   ];
   if (!libre && !listPieces(id).length) {
     deleteDossier(id);

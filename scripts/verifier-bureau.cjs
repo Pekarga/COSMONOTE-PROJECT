@@ -27,6 +27,87 @@ function anciennesDonnees() {
   return path.join(appData, "Le redacteur");
 }
 
+/** PDF d'une seule page faite d'une image JPEG, comme un courrier passé au scanner. */
+function pdfScanne(jpeg) {
+  const W = 595;
+  const H = 842;
+  const contenu = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+  const objets = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`,
+    [`<< /Type /XObject /Subtype /Image /Width 1240 /Height 1754 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, jpeg, "\nendstream"],
+    `<< /Length ${contenu.length} >>\nstream\n${contenu}\nendstream`,
+  ];
+  const parts = [Buffer.from("%PDF-1.4\n")];
+  let taille = parts[0].length;
+  const positions = [];
+  objets.forEach((o, i) => {
+    positions.push(taille);
+    const morceaux = [`${i + 1} 0 obj\n`, ...(Array.isArray(o) ? o : [o]), "\nendobj\n"].map((m) => (Buffer.isBuffer(m) ? m : Buffer.from(m, "latin1")));
+    for (const m of morceaux) {
+      parts.push(m);
+      taille += m.length;
+    }
+  });
+  const xref = `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n${positions.map((p) => String(p).padStart(10, "0") + " 00000 n \n").join("")}`;
+  parts.push(Buffer.from(`${xref}trailer\n<< /Size ${objets.length + 1} /Root 1 0 R >>\nstartxref\n${taille}\n%%EOF\n`, "latin1"));
+  return Buffer.concat(parts);
+}
+
+/** Dépose un courrier signé scanné et vérifie que son texte est lu sur l'ordinateur, sans clé. */
+async function verifierScan(page) {
+  await page.goto(new URL("/signes", page.url()).href);
+  await page.waitForLoadState("load");
+  const jpeg = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 1240;
+    c.height = 1754;
+    const x = c.getContext("2d");
+    x.fillStyle = "#fff";
+    x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = "#111";
+    x.font = "34px serif";
+    const lignes = [
+      "MINISTERE DE L'ECONOMIE ET DES FINANCES",
+      "DIRECTION DU CONTROLE BUDGETAIRE",
+      "",
+      "Abidjan, le 12 novembre 2026",
+      "",
+      "Objet : Votre demande de modification budgetaire",
+      "",
+      "Monsieur le Directeur,",
+      "Par courrier en date du 3 novembre 2026, vous avez sollicite",
+      "la modification de la ventilation de votre budget.",
+      "Je vous prie d'agreer, Monsieur le Directeur, l'assurance",
+      "de ma consideration distinguee.",
+    ];
+    lignes.forEach((l, i) => x.fillText(l, 120, 220 + i * 62));
+    return c.toDataURL("image/jpeg", 0.9).split(",")[1];
+  });
+  const debut = Date.now();
+  await page.locator(".lucarne input[type=file]").setInputFiles({
+    name: "courrier-scanne.pdf",
+    mimeType: "application/pdf",
+    buffer: pdfScanne(Buffer.from(jpeg, "base64")),
+  });
+  await page.waitForFunction(
+    () => document.querySelector(".signe-row") && !document.querySelector(".spinner") && !document.querySelector(".upload-strip"),
+    null,
+    { timeout: 240000 },
+  );
+  const signe = await page.evaluate(async () => {
+    const { signes } = await (await fetch("/api/signes")).json();
+    const s = signes.find((x) => x.nomFichier === "courrier-scanne.pdf");
+    return s ? (await (await fetch(`/api/signes/${s.id}`)).json()).signe : null;
+  });
+  console.log(`\nScan lu en ${Math.round((Date.now() - debut) / 1000)} s :`, signe?.status, signe?.error ?? "");
+  console.log((signe?.texte ?? "").slice(0, 400));
+  await page.screenshot({ path: path.join(sortie, "verification-scan.png") }).catch(() => {});
+  if (signe?.status !== "ready" || !/modification/i.test(signe.texte)) return "le courrier scanné n'a pas été lu";
+  return null;
+}
+
 (async () => {
   const dossier = anciennesDonnees();
   const args = process.platform === "linux" ? ["--no-sandbox"] : [];
@@ -52,6 +133,10 @@ function anciennesDonnees() {
   await page.screenshot({ path: path.join(sortie, "verification.png") }).catch(() => {});
   console.log("Adresse :", page.url());
   console.log("Texte affiché :\n" + texte.slice(0, 1500));
+  if (texte.includes("Lucarne des dossiers imputés")) {
+    const echec = await verifierScan(page).catch((e) => `lecture du scan : ${e.message}`);
+    if (echec) erreurs.push(echec);
+  }
   await app.close().catch(() => {});
   const journal = path.join(dossier, "journal.txt");
   if (fs.existsSync(journal)) console.log("\nJournal :\n" + fs.readFileSync(journal, "utf8").slice(-6000));
@@ -60,7 +145,7 @@ function anciennesDonnees() {
     console.error("\nÉCHEC :\n- " + erreurs.join("\n- "));
     process.exit(1);
   }
-  console.log("\nL'appli démarre et affiche l'accueil sans erreur.");
+  console.log("\nL'appli démarre, affiche l'accueil sans erreur et lit un courrier scanné.");
 })().catch((e) => {
   console.error("ÉCHEC :", e);
   process.exit(1);

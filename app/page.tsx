@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
 import { BulbIcon, CloseIcon, FolderIcon, PenIcon, SearchIcon, StarIcon, UploadIcon } from "@/components/Icons";
 import { formatDate } from "@/components/time";
-import { prepareFiles, uploadForm } from "@/components/upload";
+import { joindreFichiers, uploadForm } from "@/components/upload";
 import type { DossierSummary, SigneSummary } from "@/lib/types";
 
 function Etat({ d }: { d: DossierSummary }) {
@@ -28,6 +28,7 @@ export default function DossiersPage() {
   const [query, setQuery] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lecture, setLecture] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,9 +56,14 @@ export default function DossiersPage() {
 
   async function deposer(files: File[]) {
     setError(null);
-    setProgress(0);
+    setLecture("Préparation des fichiers…");
     const form = new FormData();
-    for (const f of await prepareFiles(files)) form.append("file", f);
+    try {
+      await joindreFichiers(form, files, setLecture);
+    } finally {
+      setLecture(null);
+    }
+    setProgress(0);
     try {
       const { id } = await uploadForm<{ id: string }>("/api/dossiers", form, setProgress);
       router.push(`/dossiers/${id}`);
@@ -91,7 +97,7 @@ export default function DossiersPage() {
           <DropZone
             className="lucarne"
             onFiles={deposer}
-            disabled={progress !== null}
+            disabled={progress !== null || lecture !== null}
             icon={<FolderIcon size={34} />}
             title="Déposez ici le dossier imputé par le Directeur"
             hint={
@@ -102,6 +108,12 @@ export default function DossiersPage() {
               </>
             }
           />
+          {lecture && (
+            <div className="upload-strip">
+              <span className="spinner" />
+              <span>{lecture}</span>
+            </div>
+          )}
           {progress !== null && (
             <div className="upload-strip">
               <span>Envoi… {progress}%</span>

@@ -80,9 +80,15 @@ async function nouveauCourrier(router: ReturnType<typeof useRouter>) {
 /** Armoiries tirées de vos courriers signés ; sans elles, rien (le logo de l'appli suit). */
 function Armoiries() {
   const [ok, setOk] = useState(true);
+  const ref = useRef<HTMLImageElement>(null);
+  // Sans armoiries enregistrées, l'image peut échouer avant que la page soit active : on vérifie au chargement.
+  useEffect(() => {
+    const img = ref.current;
+    if (img?.complete && img.naturalWidth === 0) setOk(false);
+  }, []);
   if (!ok) return null;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="banner-logo" src="/api/logo" alt="Armoiries" onError={() => setOk(false)} />;
+  return <img ref={ref} className="banner-logo" src="/api/logo" alt="Armoiries" onError={() => setOk(false)} />;
 }
 
 function Bandeau({ nom, fonction }: { nom: string; fonction: string }) {

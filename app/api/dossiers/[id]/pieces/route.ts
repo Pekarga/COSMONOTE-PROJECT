@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
 import { getDossier, updateDossier } from "@/lib/db";
 import { UNSUPPORTED_MESSAGE } from "@/lib/extract";
-import { filesFrom } from "@/lib/files";
+import { filesFrom, ocrFrom } from "@/lib/files";
 import { ajouterPieces } from "@/lib/pieces";
 import { processDossier } from "@/lib/process";
 
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const role = form.get("role") === "justificatif" ? "justificatif" : "dossier";
   const files = filesFrom(form, "file");
   if (!files.length) return Response.json({ error: "Aucun fichier reçu." }, { status: 400 });
-  const refuses = await ajouterPieces(id, files, role);
+  const refuses = await ajouterPieces(id, files, role, ocrFrom(form));
   if (refuses.length < files.length) {
     updateDossier(id, { status: "processing", step: "Lecture des nouvelles pièces" });
     void processDossier(id);
