@@ -36,11 +36,37 @@ jobs:
           npm ci
           npm run dist:win
 
+      # Aucun installateur n'est publié si l'appli ne démarre pas ou si l'accueil affiche une erreur.
+      - name: Vérifier que l'application démarre
+        shell: pwsh
+        run: |
+          npm install --no-save --no-package-lock playwright@1.63.0
+          $exe = (Get-ChildItem desktop/dist/win-unpacked -Filter "Le r*.exe" | Select-Object -First 1).FullName
+          node scripts/verifier-bureau.cjs "$exe"
+
+      # Lancement comme un double-clic (sans outil de test), pour le journal de démarrage.
+      - name: Lancer l'application comme un double-clic
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem desktop/dist/win-unpacked -Filter "Le r*.exe" | Select-Object -First 1).FullName
+          $journal = Join-Path $env:APPDATA "Le redacteur\journal.txt"
+          Remove-Item $journal -ErrorAction SilentlyContinue
+          Start-Process -FilePath $exe
+          Start-Sleep -Seconds 45
+          Get-Process | Where-Object { $_.Path -eq $exe } | Select-Object Id, MainWindowTitle, Responding | Format-Table -AutoSize
+          Get-Content $journal -ErrorAction SilentlyContinue
+          Get-Process | Where-Object { $_.Path -eq $exe } | Stop-Process -Force
+
       - name: Garder l'installateur comme artefact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Le-redacteur-Windows
-          path: desktop/dist/*.exe
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/verification.png
 
       - name: Publier dans une release
         if: startsWith(github.ref, 'refs/tags/') || inputs.version != ''

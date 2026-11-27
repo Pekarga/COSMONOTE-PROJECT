@@ -13,6 +13,22 @@ app.setPath("userData", path.join(app.getPath("appData"), "Le redacteur"));
 let server = null;
 let win = null;
 
+// Journal de démarrage : %APPDATA%\Le redacteur\journal.txt, pour comprendre un plantage.
+const JOURNAL = path.join(app.getPath("userData"), "journal.txt");
+try {
+  fs.mkdirSync(path.dirname(JOURNAL), { recursive: true });
+  if (fs.existsSync(JOURNAL) && fs.statSync(JOURNAL).size > 1_000_000) fs.rmSync(JOURNAL);
+} catch {}
+function journal(...parts) {
+  const ligne = `[${new Date().toISOString()}] ${parts.join(" ")}`.trimEnd();
+  try {
+    fs.appendFileSync(JOURNAL, ligne + "\n");
+  } catch {}
+  if (!app.isPackaged) console.log(ligne);
+}
+process.on("uncaughtException", (err) => journal("main : exception", err && err.stack ? err.stack : String(err)));
+process.on("unhandledRejection", (err) => journal("main : promesse rejetée", err && err.stack ? err.stack : String(err)));
+
 function freePort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
@@ -59,10 +75,15 @@ async function startServer() {
       HOSTNAME: "127.0.0.1",
       DATA_DIR: path.join(app.getPath("userData"), "data"),
     },
-    stdio: "inherit",
+    // Sorties du serveur dans le journal (une appli Windows sans console n'a pas de sortie standard).
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
+  server.stdout.on("data", (d) => journal("serveur :", String(d)));
+  server.stderr.on("data", (d) => journal("serveur ! ", String(d)));
+  server.on("error", (err) => journal("serveur : lancement impossible", String(err)));
   server.on("exit", (code) => {
+    journal("serveur : arrêt, code", String(code));
     if (code && !app.isQuitting) {
       dialog.showErrorBox("Le rédacteur", `Le serveur s'est arrêté (code ${code}).`);
       app.quit();
@@ -185,6 +206,13 @@ async function createWindow() {
       win.show();
     }
   };
+  // Tout ce que la page signale (erreurs, plantage) va dans le journal.
+  win.webContents.on("console-message", (e) => {
+    if (e.level === "error" || e.level === "warning") journal(`page ${e.level} :`, e.message, e.sourceId ? `(${e.sourceId}:${e.lineNumber})` : "");
+  });
+  win.webContents.on("render-process-gone", (_e, details) => journal("page : processus arrêté", JSON.stringify(details)));
+  win.webContents.on("did-fail-load", (_e, code, desc, u) => journal("page : chargement impossible", String(code), desc, u));
+  win.webContents.on("unresponsive", () => journal("page : ne répond plus"));
   win.once("ready-to-show", montrer);
   setTimeout(montrer, 8000);
   await win.loadURL(url);
@@ -199,8 +227,10 @@ if (!app.requestSingleInstanceLock()) {
       win.focus();
     }
   });
+  journal("démarrage", app.getVersion(), process.platform, process.arch, "Electron", process.versions.electron);
   app.whenReady().then(() =>
     createWindow().catch((err) => {
+      journal("main : échec du démarrage", err && err.stack ? err.stack : String(err));
       dialog.showErrorBox("Le rédacteur", String(err && err.message ? err.message : err));
       app.quit();
     }),
