@@ -43,14 +43,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $rel = gh release view --repo ggml-org/llama.cpp --json tagName,assets | ConvertFrom-Json
-          $asset = $rel.assets | Where-Object { $_.name -match '^llama-.*-bin-win-cpu-x64\.zip$' } | Select-Object -First 1
-          if (-not $asset) { throw "Archive Windows de llama.cpp introuvable dans $($rel.tagName)" }
+          # Dernière version qui publie l'archive Windows pour processeur (x64) ; toutes n'en ont pas.
+          $rel = $null; $asset = $null
+          $tags = gh release list --repo ggml-org/llama.cpp --limit 40 --exclude-drafts --exclude-pre-releases --json tagName | ConvertFrom-Json
+          foreach ($t in $tags) {
+            $r = gh release view $t.tagName --repo ggml-org/llama.cpp --json tagName,assets | ConvertFrom-Json
+            $a = $r.assets | Where-Object { $_.name -match '^llama-.*-bin-win-cpu-x64\.zip$' } | Select-Object -First 1
+            if (-not $a) {
+              $a = $r.assets | Where-Object { $_.name -match 'win' -and $_.name -match 'x64' -and $_.name -match '\.zip$' -and $_.name -notmatch 'cuda|cudart|vulkan|hip|sycl|opencl|arm64|kompute' } | Select-Object -First 1
+            }
+            if ($a) { $rel = $r; $asset = $a; break }
+            "  $($r.tagName) : pas d'archive Windows pour processeur ($(($r.assets | Select-Object -ExpandProperty name) -join ', '))"
+          }
+          if (-not $asset) { throw "Archive Windows de llama.cpp introuvable dans les 40 dernières versions" }
           "llama.cpp $($rel.tagName) : $($asset.name)"
           gh release download $rel.tagName --repo ggml-org/llama.cpp --pattern $asset.name --dir $env:RUNNER_TEMP
           $tmp = Join-Path $env:RUNNER_TEMP "llama"
           Expand-Archive (Join-Path $env:RUNNER_TEMP $asset.name) -DestinationPath $tmp -Force
           $exe = Get-ChildItem $tmp -Recurse -Filter llama-server.exe | Select-Object -First 1
+          if (-not $exe) { throw "llama-server.exe absent de $($asset.name)" }
           New-Item -ItemType Directory -Force desktop/llama | Out-Null
           Copy-Item $exe.FullName desktop/llama/
           Copy-Item (Join-Path $exe.DirectoryName "*.dll") desktop/llama/
