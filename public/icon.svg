@@ -1,5 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#1f1c18"/>
-  <path d="M150 128h120c58 0 96 32 96 82 0 38-22 64-58 75l70 99h-62l-62-92h-50v92h-54V128zm54 46v76h62c28 0 44-14 44-38s-16-38-44-38h-62z" fill="#f6f1e7"/>
-  <path d="M120 420c70-26 170-34 280-14" stroke="#e0644c" stroke-width="22" stroke-linecap="round" fill="none"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#19aa63"/><stop offset="1" stop-color="#0b8c4c"/></linearGradient>
+    <linearGradient id="o" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9a13a"/><stop offset="1" stop-color="#ef7d00"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <!-- feuille A4 au coin plié -->
+  <path d="M132 78 H318 L384 144 V420 a16 16 0 0 1 -16 16 H132 a16 16 0 0 1 -16 -16 V94 a16 16 0 0 1 16 -16 Z" fill="#fff"/>
+  <path d="M318 78 V128 a16 16 0 0 0 16 16 H384 Z" fill="#d9efe3"/>
+  <!-- en-tête et lignes du courrier -->
+  <rect x="150" y="118" width="96" height="16" rx="8" fill="#ef7d00"/>
+  <rect x="150" y="146" width="66" height="12" rx="6" fill="#f7b46a"/>
+  <rect x="150" y="196" width="200" height="12" rx="6" fill="#b9d9c7"/>
+  <rect x="150" y="224" width="200" height="12" rx="6" fill="#b9d9c7"/>
+  <rect x="150" y="252" width="200" height="12" rx="6" fill="#b9d9c7"/>
+  <rect x="150" y="280" width="130" height="12" rx="6" fill="#b9d9c7"/>
+  <!-- stylo orange posé en diagonale -->
+  <g transform="rotate(45 330 350)">
+    <rect x="300" y="190" width="60" height="190" rx="12" fill="url(#o)" stroke="#fff" stroke-width="10"/>
+    <path d="M300 380 H360 L330 444 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M312 392 H348 L330 430 Z" fill="#1d3550"/>
+    <rect x="300" y="226" width="60" height="14" fill="#fff"/>
+  </g>
 </svg>

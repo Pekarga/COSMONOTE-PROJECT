@@ -1,7 +1,7 @@
 {
   "name": "le-redacteur-desktop",
   "productName": "Le rédacteur",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Le rédacteur : rédige vos courriers administratifs et vos notes au Directeur dans le style de vos courriers signés.",
   "author": "Le rédacteur",
   "private": true,
@@ -21,11 +21,13 @@
       "main.cjs",
       "preload.cjs",
       "icon.png",
+      "icon.ico",
       "package.json"
     ],
     "icon": "icon.png",
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -33,7 +35,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Le rédacteur",
-      "artifactName": "Le-redacteur-Setup-${version}.exe"
+      "artifactName": "Le-redacteur-Setup-${version}.exe",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
     },
     "linux": {
       "target": "dir"

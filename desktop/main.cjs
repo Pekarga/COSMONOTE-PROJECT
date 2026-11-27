@@ -74,6 +74,8 @@ async function startServer() {
 }
 
 const WEB_PREFS = { contextIsolation: true, sandbox: true, preload: path.join(__dirname, "preload.cjs") };
+// Sous Windows, l'icône .ico contient toutes les tailles (barre des tâches, Alt+Tab).
+const ICONE = path.join(__dirname, process.platform === "win32" ? "icon.ico" : "icon.png");
 
 /** Fichiers ouverts depuis l'appli (pièces, courriers d'origine) et documents Word exportés. */
 function gererTelechargements(url) {
@@ -148,7 +150,7 @@ async function createWindow() {
     title: "Rédacteur de Courriers Administratifs",
     backgroundColor: "#f2f4f7",
     show: false,
-    icon: path.join(__dirname, "icon.png"),
+    icon: ICONE,
     autoHideMenuBar: true,
     webPreferences: WEB_PREFS,
   });
@@ -162,7 +164,7 @@ async function createWindow() {
           height: 1000,
           autoHideMenuBar: true,
           backgroundColor: "#ffffff",
-          icon: path.join(__dirname, "icon.png"),
+          icon: ICONE,
           webPreferences: { contextIsolation: true, sandbox: true, plugins: true },
         },
       };

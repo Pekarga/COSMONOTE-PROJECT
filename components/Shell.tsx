@@ -77,19 +77,12 @@ async function nouveauCourrier(router: ReturnType<typeof useRouter>) {
   if (d.id) router.push(`/dossiers/${d.id}`);
 }
 
+/** Armoiries tirées de vos courriers signés ; sans elles, rien (le logo de l'appli suit). */
 function Armoiries() {
   const [ok, setOk] = useState(true);
-  return ok ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img className="banner-logo" src="/api/logo" alt="Armoiries" onError={() => setOk(false)} />
-  ) : (
-    <svg className="banner-logo" viewBox="0 0 100 100" aria-hidden="true">
-      <circle cx="50" cy="50" r="46" fill="#fff" stroke="#f08a00" strokeWidth="5" />
-      <path d="M50 18 72 30v18c0 16-10 27-22 33-12-6-22-17-22-33V30Z" fill="#0a9a57" />
-      <path d="M50 26 64 34v13c0 11-6 19-14 24-8-5-14-13-14-24V34Z" fill="#fff" />
-      <path d="M41 48h18M41 55h14" stroke="#f08a00" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  );
+  if (!ok) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="banner-logo" src="/api/logo" alt="Armoiries" onError={() => setOk(false)} />;
 }
 
 function Bandeau({ nom, fonction }: { nom: string; fonction: string }) {
@@ -120,6 +113,8 @@ function Bandeau({ nom, fonction }: { nom: string; fonction: string }) {
       </svg>
       <Link href="/" className="banner-brand">
         <Armoiries />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="banner-app" src="/icon.svg" alt="Le rédacteur" />
         <span>
           <strong className="banner-title">Rédacteur de Courriers Administratifs</strong>
           <em className="banner-sub">Rédigez, gérez et imprimez vos courriers en toute simplicité</em>

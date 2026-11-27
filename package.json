@@ -1,6 +1,6 @@
 {
   "name": "le-redacteur",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Le rédacteur : rédige vos courriers administratifs et vos notes au Directeur dans le style de vos courriers signés.",
   "scripts": {

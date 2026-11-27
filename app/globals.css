@@ -61,6 +61,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .banner { position: relative; display: flex; align-items: center; gap: 18px; padding: 8px 22px; min-height: 92px; background: #fff; overflow: hidden; border-bottom: 1px solid var(--line); }
 .banner-swoosh { position: absolute; top: 0; right: 0; width: 72%; height: 100%; pointer-events: none; }
 .banner-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 16px; text-decoration: none; min-width: 0; }
+.banner-app { width: 58px; height: 58px; flex: none; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15)); }
 .banner-logo { width: 76px; height: 76px; object-fit: contain; flex: none; }
 .banner-title { display: block; font-size: clamp(1.25rem, 2.1vw, 1.95rem); font-weight: 700; color: var(--navy); letter-spacing: -0.01em; white-space: nowrap; }
 .banner-sub { display: block; font-size: 0.98rem; color: #24384c; font-style: italic; }
@@ -460,3 +461,7 @@ select.input { appearance: auto; }
   .print-hide { display: none !important; }
   .sheet-field.sheet-pied.is-empty { display: none; }
 }
+
+.apropos-head { display: flex; align-items: center; gap: 18px; }
+.apropos-head img { width: 88px; height: 88px; flex: none; }
+.apropos-head h1 { margin: 0; }

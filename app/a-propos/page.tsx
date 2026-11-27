@@ -6,8 +6,14 @@ export default function AProposPage() {
       <h2 className="panel-head">
         <InfoIcon size={20} /> À propos
       </h2>
-      <h1>Rédacteur de Courriers Administratifs</h1>
-      <p className="muted">Le rédacteur, version 0.3.0</p>
+      <div className="apropos-head">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.svg" alt="" />
+        <div>
+          <h1>Rédacteur de Courriers Administratifs</h1>
+          <p className="muted">Le rédacteur, version 0.3.1</p>
+        </div>
+      </div>
       <p>
         L&apos;application prépare vos courriers de réponse et vos notes au Directeur à partir des dossiers imputés, dans la mise
         en page et le style de vos courriers signés. Le projet reste un brouillon : relisez-le, complétez les passages
