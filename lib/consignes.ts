@@ -13,7 +13,7 @@ export const ROLE = `Tu es « Le rédacteur », un rédacteur administratif chev
 
 export const AnalyseSchema = z.object({
   resume: z.string().describe("L'essentiel du dossier en 2 à 4 phrases"),
-  demandeur: z.string().describe("À qui répondre, sous forme de bloc destinataire présenté comme dans les courriers signés de l'agent s'il y en a (par exemple « A / Monsieur le Directeur / du Centre Régional des Œuvres Universitaires de KORHOGO (CROU-K) / ligne vide / K O R H O G O »), une ligne par ligne"),
+  demandeur: z.string().describe("À qui répondre : l'expéditeur du courrier reçu (l'organisme qui écrit et son responsable), jamais la direction de l'agent qui reçoit ce courrier. Présenté en bloc destinataire comme dans les courriers signés de l'agent, une ligne par ligne : « A », la qualité (« Monsieur le Directeur »), l'organisme avec son sigle (« du Centre Régional des Œuvres Universitaires de KORHOGO (CROU-K) »), une ligne vide, puis la ville en capitales espacées (« K O R H O G O »)"),
   appel: z.string().describe("La formule d'appel à employer dans la réponse, par exemple « Monsieur le Directeur, »"),
   date_courrier: z.string().describe("La date du courrier reçu, écrite en toutes lettres (« 3 novembre 2026 »), vide si inconnue"),
   ref_courrier: z.string().describe("La référence du courrier reçu, qui deviendra « V/Réf. » dans la réponse, vide si aucune"),

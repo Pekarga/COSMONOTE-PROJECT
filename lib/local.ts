@@ -16,6 +16,7 @@ import {
   type DemandeRedaction,
 } from "./consignes";
 import { CARACTERES_PAR_JETON, CONTEXTE, demanderAuModele, type Travail } from "./modele";
+import { adapterPolitesse } from "./style";
 import type { Analyse, Redaction, Signe } from "./types";
 
 type Avancement = (t: Travail) => void;
@@ -77,25 +78,33 @@ export async function analyserDossierLocal(
   cle: string,
   pieces: PieceTexte[],
   modeles: Signe[],
+  repere: string,
   surAvancement?: Avancement,
 ): Promise<Analyse> {
   const maxJetons = 1800;
-  const systeme = `${ROLE}\n${CONSIGNE_ANALYSE}\n\n${formatReponse(AnalyseSchema)}`;
+  const systeme = `${ROLE}\n${CONSIGNE_ANALYSE}\n- Sois concis : une phrase par élément, sans mise en forme (ni gras, ni titres).\n\n${formatReponse(AnalyseSchema)}`;
   // Un seul courrier signé suffit ici : il montre comment présenter le destinataire et la formule d'appel.
   const modele = exemples(modeles.slice(0, 1), 1800);
-  const consigne = "Voici les pièces du dossier. Analyse-le.";
+  const consigne = [
+    repere ? `Repère, relevé automatiquement dans l'en-tête du courrier reçu (à vérifier) : l'expéditeur serait\n${repere}` : "",
+    "Voici les pièces du dossier. Analyse-le.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const texte = textePieces(pieces, budget(maxJetons, systeme, modele, consigne));
   const out = await demanderAuModele({
     schema: AnalyseSchema,
     systeme: `${systeme}\n\n${modele}`,
     message: `<pieces_du_dossier>\n${texte}\n</pieces_du_dossier>\n\n${consigne}`,
     maxJetons,
-    attendus: 650,
+    attendus: 900,
     libelle: "Analyse du dossier",
     cle,
     surAvancement,
   });
-  return analyseDepuis(out);
+  const analyse = sansMiseEnForme(analyseDepuis(out));
+  analyse.demandeur = bloc(analyse.demandeur);
+  return analyse;
 }
 
 /* ───────────── Rédaction ───────────── */
@@ -114,6 +123,26 @@ export async function redigerLocal(
   input: DemandeRedaction & { pieces: PieceTexte[] },
   surAvancement?: Avancement,
 ): Promise<Redaction> {
+  const r = await redigerBrut(cle, input, surAvancement);
+  // Le destinataire et la formule d'appel sont ceux de l'analyse du dossier, que l'agent a pu vérifier :
+  // un petit modèle les reprend parfois de l'en-tête du courrier reçu.
+  const a = input.analyse;
+  if (input.genre !== "note" && a?.demandeur.trim() && !a.demandeur.includes("[à compléter")) {
+    r.destinataire = bloc(a.demandeur);
+    if (a.appel.trim() && a.appel.trim() !== r.appel.trim()) {
+      r.politesse = adapterPolitesse(r.politesse, r.appel, a.appel.trim());
+      r.appel = a.appel.trim();
+    }
+  }
+  r.destinataire = bloc(r.destinataire);
+  return r;
+}
+
+async function redigerBrut(
+  cle: string,
+  input: DemandeRedaction & { pieces: PieceTexte[] },
+  surAvancement?: Avancement,
+): Promise<Redaction> {
   const maxJetons = 2000;
   const systeme = systemeRedaction(input.modeles, EXEMPLES_REDACTION);
   const brief = briefRedaction(input);
@@ -121,7 +150,7 @@ export async function redigerLocal(
   const reste = budget(maxJetons, systeme, brief);
   const dossier = input.pieces.filter((p) => p.role === "dossier");
   const pieces = reste > 800 && dossier.length ? `<pieces_du_dossier>\n${textePieces(dossier, reste - 60)}\n</pieces_du_dossier>\n\n` : "";
-  return demanderAuModele({
+  const r = await demanderAuModele({
     schema: RedactionSchema,
     systeme,
     message: `${pieces}${brief}`,
@@ -131,6 +160,7 @@ export async function redigerLocal(
     cle,
     surAvancement,
   });
+  return sansMiseEnForme(r);
 }
 
 export async function retoucherLocal(
@@ -138,7 +168,7 @@ export async function retoucherLocal(
   input: { courrier: Redaction; instruction: string; modeles: Signe[]; libelle?: string },
   surAvancement?: Avancement,
 ): Promise<Redaction> {
-  return demanderAuModele({
+  const r = await demanderAuModele({
     schema: RedactionSchema,
     systeme: systemeRedaction(input.modeles, EXEMPLES_REDACTION),
     message: consigneRetouche(input.courrier, input.instruction),
@@ -148,4 +178,34 @@ export async function retoucherLocal(
     cle,
     surAvancement,
   });
+  return sansMiseEnForme({ ...r, destinataire: bloc(r.destinataire) });
+}
+
+/* ───────────── Nettoyage des réponses ───────────── */
+
+/** Retire le gras et les titres à la Markdown qu'un petit modèle glisse parfois dans le texte. */
+function sansMiseEnForme<T>(v: T): T {
+  if (typeof v === "string") {
+    return v
+      .replace(/\*\*(.+?)\*\*/gs, "$1")
+      .replace(/__(.+?)__/gs, "$1")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\*\*/g, "") as T;
+  }
+  if (Array.isArray(v)) return v.map(sansMiseEnForme) as T;
+  if (v && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, sansMiseEnForme(x)])) as T;
+  }
+  return v;
+}
+
+/** Bloc destinataire écrit sur une ligne (« A / Monsieur le Directeur / … ») : une ligne par élément. */
+export function bloc(texte: string): string {
+  let t = texte.trim();
+  if (!t.includes("\n") && / \/ /.test(t)) t = t.split(/\s+\/\s+/).join("\n");
+  return t
+    .split("\n")
+    .map((l) => (/^\(?ligne vide\)?$/i.test(l.trim()) ? "" : l.trimEnd()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
 }

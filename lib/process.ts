@@ -184,10 +184,19 @@ export async function processDossier(id: string): Promise<void> {
       analyse = await analyserDossierClaude(blocks, choisirModeles("", dossier.signeId));
       analyse.pointsAVerifier.push(...notes);
     } else if (modeleDisponible()) {
+      // Relevé automatique de l'expéditeur, donné au modèle comme repère et gardé en secours.
+      const releve = analyserDossierDemo(pieces);
+      const repere = releve.demandeur && !releve.demandeur.includes("[à compléter") ? releve.demandeur : "";
       try {
-        analyse = await analyserDossierLocal(`dossier:${id}`, piecesTexte(pieces), choisirModeles("", dossier.signeId), (t) =>
+        analyse = await analyserDossierLocal(`dossier:${id}`, piecesTexte(pieces), choisirModeles("", dossier.signeId), repere, (t) =>
           updateDossier(id, { step: etapeModele(t) }),
         );
+        const entete = (dossier.signeId ? getSigne(dossier.signeId)?.entete : null) ?? defaultSigne("courrier")?.entete ?? "";
+        if (repere && destinataireSuspect(analyse.demandeur, entete)) {
+          // Le modèle a pris la direction de l'agent (destinataire du courrier reçu) pour le demandeur.
+          analyse.demandeur = repere;
+          analyse.appel = releve.appel || analyse.appel;
+        }
       } catch (err) {
         console.error("[processDossier] modèle", err);
         analyse = analyserDossierDemo(pieces);
@@ -211,6 +220,28 @@ export async function processDossier(id: string): Promise<void> {
     console.error("[processDossier]", err);
     updateDossier(id, { status: "error", step: null, error: message(err) });
   }
+}
+
+/**
+ * Vrai si le bloc « demandeur » désigne la direction de l'agent lui-même (celle de l'en-tête de ses courriers
+ * signés, par exemple « DIRECTION DU CONTROLE BUDGETAIRE ») : c'est alors le destinataire du courrier reçu,
+ * pas son expéditeur.
+ */
+export function destinataireSuspect(demandeur: string, entete: string): boolean {
+  const norme = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, " ")
+      .trim();
+  const d = ` ${norme(demandeur)} `;
+  if (!d.trim()) return true;
+  return entete
+    .split("\n")
+    .map((l) => norme(l).replace(/^DIRECTION (GENERALE )?(DU |DE LA |DE L |DES |D )?/, ""))
+    .filter((cle) => cle.split(" ").length >= 2 && !/^(MINISTERE|REPUBLIQUE|LE DIRECTEUR|UNION)/.test(cle))
+    .some((cle) => d.includes(` ${cle} `));
 }
 
 /** Texte d'avancement d'un travail du modèle, affiché dans le dossier. */

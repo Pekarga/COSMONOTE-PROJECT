@@ -329,6 +329,8 @@ async function verifierModele(page) {
   if (c.status !== "ready") return `rédaction : ${c.error}`;
   if (c.demo || c.remarques.some((r) => /n'a pas pu rédiger/.test(r))) return "le projet ne vient pas du modèle";
   if (c.corps.length < 200) return "le projet est trop court";
+  if (/contr[ôo]le budg[ée]taire|minist[èe]re/i.test(c.destinataire)) return `destinataire erroné : ${c.destinataire.replace(/\n/g, " / ")}`;
+  if (/\*\*/.test(`${c.corps}${JSON.stringify(analyse.d.analyse)}`)) return "du gras Markdown reste dans le texte";
 
   // Retouche demandée en quelques mots.
   t = Date.now();

@@ -137,7 +137,9 @@ async function lancer(): Promise<string> {
   const exe = binaire();
   if (!chemin || !exe) throw new Error("Le modèle de rédaction n'est pas installé.");
   const port = await portLibre();
-  const args = ["-m", chemin, "--host", "127.0.0.1", "--port", String(port), "-c", String(CONTEXTE), "-np", "1", "--jinja", "--no-webui"];
+  // Lecture des consignes (calcul) sur tous les cœurs logiques ; écriture sur les cœurs physiques (réglage par défaut).
+  const lecture = String(Math.max(1, os.cpus().length));
+  const args = ["-m", chemin, "--host", "127.0.0.1", "--port", String(port), "-c", String(CONTEXTE), "-np", "1", "-tb", lecture, "--jinja", "--no-webui"];
   etat.journal = [];
   const debut = Date.now();
   const proc = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
