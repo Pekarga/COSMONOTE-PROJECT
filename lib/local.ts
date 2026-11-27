@@ -127,7 +127,7 @@ export async function redigerLocal(
   // Le destinataire et la formule d'appel sont ceux de l'analyse du dossier, que l'agent a pu vérifier :
   // un petit modèle les reprend parfois de l'en-tête du courrier reçu.
   const a = input.analyse;
-  if (input.genre !== "note" && a?.demandeur.trim() && !a.demandeur.includes("[à compléter")) {
+  if (input.genre !== "note" && a && !demandeurIncomplet(a.demandeur) && !a.demandeur.includes("[à compléter")) {
     r.destinataire = bloc(a.demandeur);
     if (a.appel.trim() && a.appel.trim() !== r.appel.trim()) {
       r.politesse = adapterPolitesse(r.politesse, r.appel, a.appel.trim());
@@ -197,6 +197,15 @@ function sansMiseEnForme<T>(v: T): T {
     return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, sansMiseEnForme(x)])) as T;
   }
   return v;
+}
+
+/** Vrai si le bloc « demandeur » ne nomme personne : vide, ou réduit à « A » et à quelques mots. */
+export function demandeurIncomplet(demandeur: string): boolean {
+  const lignes = demandeur
+    .split(/\n|\s+\/\s+/)
+    .map((l) => l.trim())
+    .filter((l) => l && !/^(a|à)$/i.test(l));
+  return lignes.join(" ").split(/\s+/).filter(Boolean).length < 4;
 }
 
 /** Bloc destinataire écrit sur une ligne (« A / Monsieur le Directeur / … ») : une ligne par élément. */

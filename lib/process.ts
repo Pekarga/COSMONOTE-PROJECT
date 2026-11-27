@@ -21,7 +21,7 @@ import { analyserDossierClaude, analyserSigneClaude, redigerClaude, retoucherCla
 import { docxLogo, docxPied, fileKind, imageMime, readText } from "./extract";
 import { enFile } from "./file-attente";
 import { readOcr, sansTexte } from "./files";
-import { analyserDossierLocal, redigerLocal, retoucherLocal, type PieceTexte } from "./local";
+import { analyserDossierLocal, demandeurIncomplet, redigerLocal, retoucherLocal, type PieceTexte } from "./local";
 import { modeleDisponible, type Travail } from "./modele";
 import { FILES_DIR } from "./paths";
 import { REGLES_RELECTURE, bilan, consigneSecondePasse, enRemarques, nettoyerCourrier, relireCourrier } from "./relecture";
@@ -195,8 +195,9 @@ export async function processDossier(id: string): Promise<void> {
           updateDossier(id, { step: etapeModele(t) }),
         );
         const entete = (dossier.signeId ? getSigne(dossier.signeId)?.entete : null) ?? defaultSigne("courrier")?.entete ?? "";
-        if (repere && destinataireSuspect(analyse.demandeur, entete)) {
-          // Le modèle a pris la direction de l'agent (destinataire du courrier reçu) pour le demandeur.
+        if (repere && (destinataireSuspect(analyse.demandeur, entete) || demandeurIncomplet(analyse.demandeur))) {
+          // Le modèle a pris la direction de l'agent (destinataire du courrier reçu) pour le demandeur,
+          // ou n'a écrit que le début du bloc (« A ») : le relevé de l'en-tête du courrier reçu le remplace.
           analyse.demandeur = repere;
           analyse.appel = releve.appel || analyse.appel;
         }

@@ -52,12 +52,36 @@ test("une référence des courriers signés ou des pièces est gardée", () => {
   assert.deepEqual(r.remarques, []);
 });
 
-test("un article inconnu d'un texte connu est signalé, sans toucher au texte", () => {
+test("un article inconnu d'un texte connu est marqué à compléter, le texte est gardé", () => {
   const texte = "En application de l'article 45 du décret n°2014-416 du 12 juillet 2014, la décision doit être visée.";
   const r = controlerReferences(projet([texte]), { textes: [RECU], ailleurs });
-  assert.equal(r.corps[0], texte);
+  assert.equal(r.corps[0], "En application de [à compléter : article] du décret n°2014-416 du 12 juillet 2014, la décision doit être visée.");
   assert.equal(r.remarques.length, 1);
   assert.ok(r.remarques[0].startsWith(TITRES_SOURCES[1]));
+});
+
+test("un article inventé devant un texte à compléter est aussi marqué", () => {
+  const r = controlerReferences(
+    projet(["Or, en application des dispositions de l’article 12 de l’arrêté N°[à compléter : référence exacte] fixant les règles de gestion budgétaire, la demande relève du Ministre."]),
+    { textes: [RECU], ailleurs },
+  );
+  assert.equal(
+    r.corps[0],
+    "Or, en application des dispositions de [à compléter : article] de l’arrêté N°[à compléter : référence exacte] fixant les règles de gestion budgétaire, la demande relève du Ministre.",
+  );
+});
+
+test("les remarques du modèle qui citent une référence inventée sont retirées", () => {
+  const r = controlerReferences(
+    {
+      ...projet(["Selon le décret N°2020-1234/AU du 15 août 2020, la demande est rejetée."]),
+      remarques: ["[À vérifier : le décret N°2020-1234/AU est-il toujours en vigueur ?]", "[À compléter : vérifier si la décision N°07/2026/MESRS/CROU-B/D est jointe.]"],
+    },
+    { textes: [RECU], ailleurs },
+  );
+  assert.equal(r.remarques.length, 2);
+  assert.match(r.remarques[0], /décision N°07/);
+  assert.ok(r.remarques[1].startsWith(TITRES_SOURCES[0]));
 });
 
 test("une décision ou un courrier aux numéros inventés sont aussi retirés", () => {

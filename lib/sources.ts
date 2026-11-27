@@ -17,6 +17,8 @@ export type Sources = {
 export type Citation = {
   debut: number;
   fin: number;
+  /** Fin de la mention de l'article, quand la citation commence par un article. */
+  finArticle: number;
   extrait: string;
   nature: "texte" | "decision" | "courrier" | null;
   numero: string;
@@ -64,21 +66,23 @@ export function citations(texte: string): Citation[] {
     const numero = g.num || g.nu || "";
     const date = g.date || "";
     if (!numero && !date) continue;
-    refs.push({ debut: m.index ?? 0, fin: (m.index ?? 0) + m[0].length, extrait: m[0], nature: nature(g.type), numero, date, articles: [] });
+    const debut = m.index ?? 0;
+    refs.push({ debut, fin: debut + m[0].length, finArticle: debut, extrait: m[0], nature: nature(g.type), numero, date, articles: [] });
   }
   const resultat: Citation[] = [];
   const liees = new Set<Citation>();
   for (const m of texte.matchAll(ARTICLE)) {
     const debut = m.index ?? 0;
-    let fin = debut + m[0].length;
+    const finArticle = debut + m[0].length;
+    let fin = finArticle;
     const articles = (m.groups?.nums ?? "").match(/\d+(?:[-.]\d+)*/g) ?? [];
     const suite = refs.find((r) => r.debut >= fin && LIEN.test(texte.slice(fin, r.debut)));
     if (suite && suite.nature === "texte") {
       liees.add(suite);
       fin = suite.fin;
-      resultat.push({ ...suite, debut, fin, extrait: texte.slice(debut, fin), articles });
+      resultat.push({ ...suite, debut, fin, finArticle, extrait: texte.slice(debut, fin), articles });
     } else {
-      resultat.push({ debut, fin, extrait: m[0], nature: null, numero: "", date: "", articles });
+      resultat.push({ debut, fin, finArticle, extrait: m[0], nature: null, numero: "", date: "", articles });
     }
   }
   resultat.push(...refs.filter((r) => !liees.has(r)));
@@ -147,8 +151,8 @@ const court = (s: string) => {
 };
 
 /**
- * Retire du projet les références qui ne figurent dans aucune source (remplacées par [à compléter]) et
- * signale les articles qu'on ne retrouve pas.
+ * Retire du projet les références qui ne figurent dans aucune source, et les articles qu'on n'y retrouve pas :
+ * ils sont remplacés par [à compléter] et signalés dans les remarques.
  */
 export function controlerReferences(r: Redaction, sources: Sources): Redaction {
   const v = verificateur(sources);
@@ -168,8 +172,11 @@ export function controlerReferences(r: Redaction, sources: Sources): Redaction {
       }
       const inconnus = v.articles(c);
       if (inconnus.length) {
+        // Le texte est connu (ou non numéroté), mais pas l'article : seul l'article est à compléter.
+        sortie += texte.slice(position, c.debut) + "[à compléter : article]";
+        position = c.finArticle;
         remarques.push(
-          `${TITRES_SOURCES[1]}« ${court(c.extrait)} » : ${inconnus.length > 1 ? "ces articles ne figurent" : "cet article ne figure"} ni dans le dossier ni dans vos courriers signés. Vérifiez-le avant signature.`,
+          `${TITRES_SOURCES[1]}« ${court(c.extrait)} » : ${inconnus.length > 1 ? "ces articles ne figurent" : "cet article ne figure"} ni dans le dossier ni dans vos courriers signés. Il est marqué [à compléter] : indiquez le bon article, ou retirez-le.`,
         );
       }
     }
@@ -177,7 +184,11 @@ export function controlerReferences(r: Redaction, sources: Sources): Redaction {
   };
   const corps = r.corps.map(corriger);
   const objet = corriger(r.objet);
-  const anciennes = r.remarques.filter((x) => !TITRES_SOURCES.some((t) => x.startsWith(t)));
+  // Les remarques du modèle qui reprennent une référence inventée (« le décret N°… est-il en vigueur ? »)
+  // laisseraient croire qu'elle existe : nos remarques les remplacent.
+  const anciennes = r.remarques.filter(
+    (x) => !TITRES_SOURCES.some((t) => x.startsWith(t)) && !citations(x).some((c) => c.nature && !v.reference(c)),
+  );
   return { ...r, objet, corps, remarques: [...new Set([...anciennes, ...remarques])] };
 }
 
