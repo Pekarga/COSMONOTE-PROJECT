@@ -1,7 +1,7 @@
 {
   "name": "le-redacteur-desktop",
   "productName": "Le rédacteur",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Le rédacteur : rédige vos courriers administratifs et vos notes au Directeur dans le style de vos courriers signés.",
   "author": "Le rédacteur",
   "private": true,

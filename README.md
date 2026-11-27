@@ -31,6 +31,7 @@ Pour des projets vraiment rédigés (et des retouches libres : « citer l'articl
 - Le téléchargement passe par le réseau du système (proxy et certificats de Windows), reprend tout seul après une coupure et peut être mis en pause ; il repart là où il s'était arrêté, même après la fermeture de l'appli. « J'ai déjà le fichier » permet de l'installer depuis une clé USB.
 - Le modèle tourne avec [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, licence MIT), livré avec l'appli. Il démarre à la première demande et s'arrête après dix minutes sans travail pour rendre la mémoire.
 - Il analyse les dossiers, rédige les courriers et les notes, fait la seconde passe de relecture anti-IA et les retouches, avec les mêmes consignes que Claude (`lib/consignes.ts`), resserrées pour tenir dans 8 192 jetons (`lib/local.ts`). Réponses contraintes par schéma JSON.
+- Les références citées par le modèle (lois, décrets, arrêtés, décisions, courriers, articles) sont contrôlées (`lib/sources.ts`) : celles qui ne figurent ni dans les pièces du dossier, ni dans les courriers signés, ni dans les consignes sont remplacées par [à compléter] et signalées dans les remarques.
 - Mémoire : 8 Go au moins, 16 Go conseillés. Comptez quelques minutes par projet sur un ordinateur de bureau ; l'avancement s'affiche dans le dossier et dans le projet.
 - Sans le modèle, ou s'il échoue, le projet est assemblé à partir des consignes et des formules des courriers signés, comme avant.
 
@@ -61,7 +62,7 @@ npm run build
 npm start
 ```
 
-Puis ouvrez http://localhost:3000. Pour développer : `npm run dev`. Tests de la relecture : `node --test scripts/test-relecture.mjs`.
+Puis ouvrez http://localhost:3000. Pour développer : `npm run dev`. Tests de la relecture et du contrôle des références : `node --test scripts/test-relecture.mjs scripts/test-sources.mjs`.
 
 ## Où sont mes données ?
 

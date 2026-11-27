@@ -7,9 +7,11 @@ import {
   getDossier,
   getSigne,
   getSigneFiles,
+  listPieces,
   listPiecesWithPath,
   modelesProches,
   piecesEnAttente,
+  signesContiennent,
   updateCourrier,
   updateDossier,
   updateSigne,
@@ -23,6 +25,7 @@ import { analyserDossierLocal, redigerLocal, retoucherLocal, type PieceTexte } f
 import { modeleDisponible, type Travail } from "./modele";
 import { FILES_DIR } from "./paths";
 import { REGLES_RELECTURE, bilan, consigneSecondePasse, enRemarques, nettoyerCourrier, relireCourrier } from "./relecture";
+import { controlerReferences, referencesSansAppui, type Sources } from "./sources";
 import { dateLongue, miseEnPage } from "./style";
 import type { Analyse, Courrier, Genre, Piece, Redaction, Signe } from "./types";
 
@@ -197,6 +200,12 @@ export async function processDossier(id: string): Promise<void> {
           analyse.demandeur = repere;
           analyse.appel = releve.appel || analyse.appel;
         }
+        const a = analyse;
+        a.pointsAVerifier.push(
+          ...referencesSansAppui([a.resume, a.orientation, ...a.elements, ...a.demandes], sourcesDossier(pieces)).filter(
+            (p) => !a.pointsAVerifier.includes(p),
+          ),
+        );
       } catch (err) {
         console.error("[processDossier] modèle", err);
         analyse = analyserDossierDemo(pieces);
@@ -252,6 +261,18 @@ function etapeModele(t: Travail): string {
 
 function piecesTexte(pieces: Piece[]): PieceTexte[] {
   return pieces.map((p) => ({ nom: p.nom, role: p.role, texte: p.texte }));
+}
+
+/**
+ * Ce qui fait foi pour les références citées par le modèle : les pièces du dossier, les courriers signés
+ * (recherchés en base) et ce que l'agent a écrit lui-même (consignes, demande de retouche, projet actuel).
+ */
+function sourcesDossier(pieces: Piece[], ...ecrits: string[]): Sources {
+  return { textes: [...pieces.map((p) => p.texte), ...ecrits], ailleurs: signesContiennent };
+}
+
+function texteProjet(r: Redaction): string {
+  return [r.objet, r.vref, ...r.corps, ...r.pj].join("\n");
 }
 
 /* ───────────── Rédaction ───────────── */
@@ -327,6 +348,7 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
     let redaction: Redaction | null = null;
     let demo = false;
     let echecModele: string | null = null;
+    let parLeModele = false;
     const modeles = () => choisirModeles(courrier.genre === "note" ? "note" : (dossier.analyse?.typeReponse ?? ""), courrier.signeId);
     const demande = {
       genre: courrier.genre,
@@ -344,6 +366,7 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
     } else if (modeleDisponible()) {
       try {
         redaction = await redigerLocal(`courrier:${courrierId}`, { ...demande, modeles: modeles(), pieces: piecesTexte(pieces) });
+        parLeModele = true;
       } catch (err) {
         console.error("[processCourrier] modèle", err);
         echecModele = message(err);
@@ -373,6 +396,8 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
       demo = true;
     }
     redaction = await relireProjet(redaction, !demo ? modeles() : null, `courrier:${courrierId}`);
+    // Un petit modèle invente parfois une référence de texte vraisemblable : on ne garde que celles du dossier.
+    if (parLeModele) redaction = controlerReferences(redaction, sourcesDossier(pieces, dossier.consignes));
     // Pour une note, la ligne « NOTE A … » posée à la création est conservée.
     if (courrier.genre === "note" && courrier.destinataire) redaction.destinataire = courrier.destinataire;
     updateCourrier(courrierId, { ...redactionVersCourrier(redaction), status: "ready", error: null, demo });
@@ -429,7 +454,8 @@ export async function retoucher(courrier: Courrier, instruction: string): Promis
       instruction,
       modeles: choisirModeles(courrier.genre === "note" ? "note" : (dossier?.analyse?.typeReponse ?? ""), courrier.signeId),
     });
-    updateCourrier(courrier.id, { ...redactionVersCourrier(await relireProjet(r, null)), demo: false });
+    const sources = sourcesDossier(courrier.dossierId ? listPieces(courrier.dossierId) : [], dossier?.consignes ?? "", instruction, texteProjet(actuel));
+    updateCourrier(courrier.id, { ...redactionVersCourrier(controlerReferences(await relireProjet(r, null), sources)), demo: false });
     return null;
   }
   const r = retoucherDemo(actuel, instruction);

@@ -11,7 +11,7 @@ export default function AProposPage() {
         <img src="/icon.svg" alt="" />
         <div>
           <h1>Rédacteur de Courriers Administratifs</h1>
-          <p className="muted">Le rédacteur, version 0.5.1</p>
+          <p className="muted">Le rédacteur, version 0.5.2</p>
         </div>
       </div>
       <p>

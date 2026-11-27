@@ -435,6 +435,12 @@ export function signesParStatut(status: Signe["status"]): string[] {
   return (getDb().prepare("SELECT id FROM signes WHERE status = ? ORDER BY created_at").all(status) as Row[]).map((r) => String(r.id));
 }
 
+/** Vrai si l'un des fragments (un numéro de texte, « article 12 »…) figure dans un courrier signé. */
+export function signesContiennent(fragments: string[]): boolean {
+  const stmt = getDb().prepare("SELECT 1 FROM signes WHERE status = 'ready' AND instr(lower(texte), ?) > 0 LIMIT 1");
+  return fragments.some((f) => f.trim() && stmt.get(f.toLowerCase()) !== undefined);
+}
+
 /**
  * Les courriers signés les plus proches du courrier à rédiger (même genre, même type, mise en page choisie),
  * choisis par la base sans tout charger.
