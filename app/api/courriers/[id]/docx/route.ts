@@ -13,7 +13,7 @@ function nomFichier(objet: string, date: string) {
     .trim()
     .replace(/\s+/g, "-")
     .slice(0, 60);
-  return `${date}-${base || "Courrier"}.docx`;
+  return `${date ? `${date}-` : ""}${base || "Courrier"}.docx`;
 }
 
 /** Télécharge le courrier au format Word. */

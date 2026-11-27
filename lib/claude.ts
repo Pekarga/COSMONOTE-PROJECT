@@ -2,12 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { CLAUDE_MODEL, anthropicKey } from "./config";
+import { REGLES_ANTI_IA } from "./relecture";
 import { REGLES_REDACTION } from "./style";
 import type { Analyse, Genre, Redaction, Signe } from "./types";
 
 let client: { key: string | null; instance: Anthropic } | null = null;
 function getClient(): Anthropic {
-  // La clé peut changer depuis la page Réglages : on recrée le client si besoin.
+  // La clé peut changer depuis la page Paramètres : on recrée le client si besoin.
   const key = anthropicKey();
   if (!client || client.key !== key) {
     client = { key, instance: key ? new Anthropic({ apiKey: key }) : new Anthropic() };
@@ -226,6 +227,9 @@ function systemeRedaction(modeles: Signe[]): Anthropic.Beta.BetaTextBlockParam[]
 Tu rédiges des projets de courriers administratifs que l'agent relira puis fera signer.
 
 ${REGLES_REDACTION}
+
+${REGLES_ANTI_IA}
+
 - Les courriers déjà signés par l'agent, fournis ci-dessous, sont ta référence : reprends leur ton, leur vocabulaire, leurs formules d'appel et de politesse, la longueur de leurs paragraphes et leurs habitudes. Ils priment sur les règles générales quand ils diffèrent.
 - Suis l'instruction du directeur portée sur le dossier, puis les consignes de l'agent.
 - Rédige seulement l'objet, le destinataire, la formule d'appel, le corps, la formule de politesse (ou la formule finale d'une note), les pièces jointes et l'ampliation : l'en-tête, les références, la date et la signature viennent de la mise en page.`,

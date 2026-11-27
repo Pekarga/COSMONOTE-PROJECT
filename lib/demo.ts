@@ -360,7 +360,7 @@ export function analyserDossierDemo(pieces: { nom: string; role: string; texte: 
   const dateTexte = date ? `${date[1]} ${date[2].toLowerCase()} ${date[3]}` : "";
 
   const points = [
-    "Mode démo : cette analyse repère des mots-clés. Ajoutez votre clé Claude dans les Réglages pour une vraie analyse.",
+    "Mode démo : cette analyse repère des mots-clés. Ajoutez votre clé Claude dans les Paramètres pour une vraie analyse.",
     ...(sansTexte.length ? [`Pièces non lues en mode démo (photos ou scans) : ${sansTexte.join(", ")}.`] : []),
     demandeur ? "Vérifier le destinataire de la réponse." : "Compléter le destinataire de la réponse.",
     dateTexte ? "" : "Retrouver la date du courrier reçu.",
@@ -399,39 +399,44 @@ export function analyserDossierDemo(pieces: { nom: string; role: string; texte: 
 
 /** La raison donnée après « Refuser : … » ou « Accorder, car … ». */
 function motif(r: string): string {
-  return r.replace(/^(car|parce que|puisque|en effet,?)\s+/i, "").trim();
+  return r.replace(/^(car|parce que|puisque|en effet,?)\s+/i, "").replace(/[.;]\s*$/, "").trim();
 }
 
-/** « ne pas donner suite : le virement exige… » devient « ne pas donner suite. En effet, le virement exige… ». */
-function avecMotif(r: string): string {
-  if (!r) return "[à compléter].";
+/** « ne pas donner suite : le virement exige… » : la raison passe devant, avec « Or, », comme dans les courriers signés. */
+function avecMotif(r: string, debut: string, lien = "Au regard de ce qui précède, il paraît indiqué de"): string {
+  if (!r) return `${debut} [à compléter].`;
   const [action, ...raison] = r.split(/\s+:\s+/);
-  return raison.length ? `${action}. En effet, ${motif(raison.join(" : "))}.` : `${r}.`;
+  return raison.length ? `Or, ${motif(raison.join(" : "))}. ${lien} ${action}.` : `${debut} ${r}.`;
 }
 
 const VERBES: [RegExp, (rest: string, genre: Genre) => string][] = [
   [/^(accepter|accorder|donner une suite favorable|valider|viser)\b\s*/i, (r, g) =>
+    (r ? `L'examen du dossier fait ressortir que ${motif(r)}. ` : "") +
     (g === "note"
-      ? "Au regard de ce qui précède, il paraît indiqué d'accorder une suite favorable à la demande."
-      : "J'ai l'honneur de porter à votre connaissance qu'une suite favorable est réservée à votre demande.") +
-    (r ? ` En effet, ${motif(r)}.` : "")],
+      ? `${r ? "Par conséquent" : "Au regard de ce qui précède"}, il paraît indiqué d'accorder une suite favorable à la demande.`
+      : `${r ? "Par conséquent, j'ai" : "J'ai"} l'honneur de porter à votre connaissance qu'une suite favorable est réservée à votre demande.`)],
   [/^(refuser|rejeter|d[ée]cliner|ne pas donner suite)\b\s*/i, (r, g) =>
+    (r ? `Or, ${motif(r)}. ` : "") +
     (g === "note"
       ? "Au regard de ce qui précède, il paraît indiqué de ne pas réserver une suite favorable à la demande."
-      : "Au vu de ce qui précède, votre demande ne peut recevoir une suite favorable.") +
-    (r ? ` En effet, ${motif(r)}.` : "")],
-  [/^(sugg[ée]rer|inviter [àa]|conseiller)\b\s*(de\s+)?/i, (r) => `Toutefois, je vous suggère de ${avecMotif(r)}`],
-  [/^(proposer)\b\s*(de\s+)?/i, (r) => `Au regard de ce qui précède, il paraît indiqué de ${avecMotif(r)}`],
+      : "Au vu de ce qui précède, votre demande ne peut recevoir une suite favorable.")],
+  [/^(sugg[ée]rer|inviter [àa]|conseiller)\b\s*(de\s+|d')?/i, (r) => avecMotif(r, "Toutefois, je vous suggère de", "A cet effet, je vous suggère de")],
+  [/^(proposer)\b\s*(de\s+|d')?/i, (r) => avecMotif(r, "Au regard de ce qui précède, il paraît indiqué de")],
   [/^(demander|r[ée]clamer|solliciter)\b\s*/i, (r) => `Je vous saurais gré de bien vouloir me faire parvenir ${r || "[à compléter : pièces attendues]"}.`],
   [/^(rappeler)\b\s*(que\s+)?/i, (r) => `Je vous rappelle que ${r || "[à compléter]"}.`],
   [/^(informer|indiquer|pr[ée]ciser|signaler)\b\s*(que\s+)?/i, (r) => `J'ai l'honneur de porter à votre connaissance que ${r || "[à compléter]"}.`],
   [/^(transmettre|envoyer|joindre)\b\s*/i, (r) => `Je vous prie de trouver ci-joint ${r || "les pièces demandées"}.`],
 ];
 
+/** Élision après « que » et « de » : « que aucune » devient « qu'aucune », « de informer » devient « d'informer ». */
+function elider(t: string): string {
+  return t.replace(/\b(qu|d)e ([aeiouyéèêëàâîïôûœAEIOUYÉÈÊÀÂÎÔÛŒ])/g, "$1'$2");
+}
+
 function phrase(consigne: string, genre: Genre): string {
   const c = consigne.trim().replace(/^[-•*]\s*/, "").replace(/[.;]\s*$/, "");
   for (const [re, build] of VERBES) {
-    if (re.test(c)) return build(c.replace(re, "").replace(/^[:,;–—-]\s*/, "").trim(), genre);
+    if (re.test(c)) return elider(build(c.replace(re, "").replace(/^[:,;–—-]\s*/, "").trim(), genre));
   }
   return `${c[0].toUpperCase()}${c.slice(1)}.`;
 }
@@ -475,7 +480,6 @@ export function redigerDemo(input: {
   const objet = a?.objetCourrier ? a.objetCourrier.charAt(0).toLowerCase() + a.objetCourrier.slice(1) : "";
   if (note) {
     corps.push(`Par courrier${acte}${date}, ${auteur(a?.demandeur ?? "")} a transmis ${objet ? `un dossier relatif à : ${objet}` : "[à compléter : objet]"}.`);
-    corps.push("Après analyse, il en ressort que :");
   } else {
     corps.push(`Par courrier${acte}${date}, vous m'avez transmis ${objet ? `votre ${objet.replace(/^(votre|vos)\s+/i, "")}` : "[à compléter : objet de votre demande]"}.`);
   }
@@ -483,7 +487,15 @@ export function redigerDemo(input: {
     .split(/\n+/)
     .map((l) => l.trim())
     .filter(Boolean);
-  if (consignes.length) corps.push(...consignes.map((c) => phrase(c, input.genre)));
+  const phrases = consignes.map((c) => phrase(c, input.genre));
+  // Dans la note, la première observation suit « Après analyse, il ressort que… » au lieu d'un « Or, » isolé.
+  if (note && phrases.length) {
+    const m = phrases[0].match(/^(?:Or, |L'examen du dossier fait ressortir que )(.+)$/s);
+    const libre = !VERBES.some(([re]) => re.test(consignes[0].replace(/^[-•*]\s*/, "")));
+    if (m) phrases[0] = `Après analyse, il ressort que ${m[1]}`;
+    else if (libre) phrases[0] = elider(`Après analyse, il ressort que ${phrases[0].charAt(0).toLowerCase()}${phrases[0].slice(1)}`);
+  }
+  if (phrases.length) corps.push(...phrases);
   else corps.push("[à compléter : analyse et réponse sur le fond. Indiquez vos consignes pour que Le rédacteur la prépare.]");
   if (input.ton === "ferme" && !note) corps.push("Je vous demande de bien vouloir prendre les dispositions nécessaires dans les meilleurs délais.");
 
@@ -510,7 +522,7 @@ export function redigerDemo(input: {
     pj: input.pj,
     ampliation: note ? [] : ampliation,
     remarques: [
-      "Mode démo : ce projet est assemblé à partir de vos consignes et de formules d'usage, sans IA. Ajoutez votre clé Claude dans les Réglages pour une vraie rédaction dans votre style.",
+      "Mode démo : ce projet est assemblé à partir de vos consignes et de formules d'usage, sans IA. Ajoutez votre clé Claude dans les Paramètres pour une vraie rédaction dans votre style.",
       ...(a?.pointsAVerifier.filter((p) => !p.startsWith("Mode démo")) ?? []),
     ],
   };

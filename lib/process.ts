@@ -17,6 +17,7 @@ import { analyserDossierDemo, analyserSigneDemo, redigerDemo, retoucherDemo } fr
 import { analyserDossierClaude, analyserSigneClaude, redigerClaude, retoucherClaude, type Block } from "./claude";
 import { docxLogo, docxPied, fileKind, imageMime, readText } from "./extract";
 import { FILES_DIR } from "./paths";
+import { REGLES_RELECTURE, bilan, consigneSecondePasse, enRemarques, nettoyerCourrier, relireCourrier } from "./relecture";
 import { dateLongue, miseEnPage } from "./style";
 import type { Analyse, Courrier, Genre, Piece, Redaction, Signe } from "./types";
 
@@ -77,7 +78,7 @@ export async function processSigne(id: string): Promise<void> {
 
     if (!texte) {
       throw new Error(
-        "En mode démo, Le rédacteur ne lit pas les photos ni les PDF scannés. Ajoutez votre clé Claude dans les Réglages, ou déposez ce courrier en Word ou en PDF contenant du texte.",
+        "En mode démo, Le rédacteur ne lit pas les photos ni les PDF scannés. Ajoutez votre clé Claude dans les Paramètres, ou déposez ce courrier en Word ou en PDF contenant du texte.",
       );
     }
     updateSigne(id, { ...analyserSigneDemo(texte), pied, texte, status: "ready", error: null, demo: true });
@@ -267,6 +268,10 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
       });
       demo = true;
     }
+    redaction = await relireProjet(
+      redaction,
+      hasClaude() ? choisirModeles(courrier.genre === "note" ? "note" : (dossier.analyse?.typeReponse ?? ""), courrier.signeId) : null,
+    );
     // Pour une note, la ligne « NOTE A … » posée à la création est conservée.
     if (courrier.genre === "note" && courrier.destinataire) redaction.destinataire = courrier.destinataire;
     updateCourrier(courrierId, { ...redactionVersCourrier(redaction), status: "ready", error: null, demo });
@@ -274,6 +279,34 @@ export async function processCourrier(courrierId: string, dossierId: string): Pr
     console.error("[processCourrier]", err);
     updateCourrier(courrierId, { status: "error", error: message(err) });
   }
+}
+
+/** Remarques ajoutées par une relecture précédente : on les remplace à chaque nouvelle relecture. */
+const TITRES_RELECTURE = REGLES_RELECTURE.map((r) => `${r.titre} : `);
+
+/**
+ * Relecture du projet : corrections sûres (guillemets, tirets, formules de remplissage), puis repérage
+ * des tournures qui sonnent « texte généré ». Avec une clé Claude, une seconde passe les corrige.
+ */
+async function relireProjet(r: Redaction, secondePasse: Signe[] | null): Promise<Redaction> {
+  const remarques = r.remarques.filter((x) => !TITRES_RELECTURE.some((t) => x.startsWith(t)));
+  let propre = nettoyerCourrier(r);
+  let constats = relireCourrier(propre);
+  if (secondePasse && bilan(constats).aCorriger > 0) {
+    try {
+      const revu = await retoucherClaude({
+        courrier: propre,
+        instruction: `Relis ce projet et corrige ce qui trahit encore une rédaction par IA. Garde les références, les dates, les montants, le destinataire et le sens ; n'ajoute aucun fait ; ne touche pas aux formules tirées des courriers signés.\n\n${consigneSecondePasse(propre, constats)}`,
+        modeles: secondePasse,
+      });
+      propre = nettoyerCourrier(revu);
+      constats = relireCourrier(propre);
+    } catch (err) {
+      // La seconde passe est un plus : en cas d'échec, on garde le premier projet.
+      console.error("[relireProjet]", err);
+    }
+  }
+  return { ...propre, remarques: [...remarques, ...enRemarques(constats)] };
 }
 
 /** Retouche demandée par l'agent. Renvoie un message si la retouche est impossible. */
@@ -286,13 +319,13 @@ export async function retoucher(courrier: Courrier, instruction: string): Promis
       instruction,
       modeles: choisirModeles(dossier?.analyse?.typeReponse ?? "", courrier.signeId),
     });
-    updateCourrier(courrier.id, { ...redactionVersCourrier(r), demo: false });
+    updateCourrier(courrier.id, { ...redactionVersCourrier(await relireProjet(r, null)), demo: false });
     return null;
   }
   const r = retoucherDemo(actuel, instruction);
   if (!r) {
-    return "En mode démo, trois retouches sont possibles : « plus court », « ton plus ferme » et « ton plus courtois ». Ajoutez votre clé Claude dans les Réglages pour toutes les autres.";
+    return "En mode démo, trois retouches sont possibles : « plus court », « ton plus ferme » et « ton plus courtois ». Ajoutez votre clé Claude dans les Paramètres pour toutes les autres.";
   }
-  updateCourrier(courrier.id, redactionVersCourrier(r));
+  updateCourrier(courrier.id, redactionVersCourrier(await relireProjet(r, null)));
   return null;
 }

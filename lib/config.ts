@@ -2,7 +2,7 @@ import { getSetting } from "./db";
 
 export const CLAUDE_MODEL = "claude-opus-5-5";
 
-// La clé saisie dans la page Réglages prime sur la variable d'environnement.
+// La clé saisie dans la page Paramètres prime sur la variable d'environnement.
 export function anthropicKey(): string | null {
   return getSetting("anthropic_api_key") || process.env.ANTHROPIC_API_KEY || null;
 }

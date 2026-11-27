@@ -143,7 +143,10 @@ export default function SignesPage() {
             {prets.length > 1 ? "s" : ""}
             {prets.length > 0 &&
               ` : ${prets.length - notes} courrier${prets.length - notes > 1 ? "s" : ""}, ${notes} note${notes > 1 ? "s" : ""}`}
-            . L&apos;étoile marque la mise en page utilisée par défaut.
+            .{" "}
+          {signes.some((s) => s.defaut)
+            ? "L'étoile marque la mise en page utilisée par défaut."
+            : "Cliquez sur une étoile pour choisir la mise en page par défaut ; sinon, Le rédacteur prend le modèle le plus complet."}
           </p>
         )}
 
