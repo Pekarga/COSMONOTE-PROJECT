@@ -24,7 +24,7 @@ import {
 
 declare global {
   interface Window {
-    redacteur?: { savePdf: (name: string) => Promise<string | null>; quitter?: () => void };
+    redacteur?: { savePdf: (name: string) => Promise<string | null>; quitter?: () => void; ouvrirJournal?: () => void };
   }
 }
 

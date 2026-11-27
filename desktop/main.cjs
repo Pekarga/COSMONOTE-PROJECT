@@ -4,6 +4,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
+const os = require("node:os");
 const path = require("node:path");
 
 // Dossier des données : %APPDATA%\Le redacteur sous Windows.
@@ -26,6 +27,26 @@ function journal(...parts) {
   } catch {}
   if (!app.isPackaged) console.log(ligne);
 }
+// Affichage : si le processus graphique ou la page a planté, on relance sans accélération graphique.
+const SANS_GPU = path.join(app.getPath("userData"), "sans-acceleration.txt");
+if (fs.existsSync(SANS_GPU)) app.disableHardwareAcceleration();
+function relancerSansGpu(motif) {
+  if (fs.existsSync(SANS_GPU)) return false;
+  journal("relance sans accélération graphique :", motif);
+  try {
+    fs.writeFileSync(SANS_GPU, `Accélération graphique coupée le ${new Date().toISOString()} : ${motif}\n`);
+  } catch {}
+  app.isQuitting = true;
+  if (server) server.kill();
+  app.relaunch();
+  app.exit(0);
+  return true;
+}
+app.on("child-process-gone", (_e, d) => {
+  journal("processus", d.type, "arrêté :", d.reason, String(d.exitCode));
+  if (d.type === "GPU" && d.reason !== "clean-exit") relancerSansGpu(`processus graphique ${d.reason}`);
+});
+
 process.on("uncaughtException", (err) => journal("main : exception", err && err.stack ? err.stack : String(err)));
 process.on("unhandledRejection", (err) => journal("main : promesse rejetée", err && err.stack ? err.stack : String(err)));
 
@@ -163,6 +184,7 @@ async function createWindow() {
   gererTelechargements(url);
   gererPdf(url);
   ipcMain.on("quitter", () => app.quit());
+  ipcMain.on("ouvrir-journal", () => shell.openPath(JOURNAL));
   win = new BrowserWindow({
     width: 1280,
     height: 900,
@@ -210,7 +232,20 @@ async function createWindow() {
   win.webContents.on("console-message", (e) => {
     if (e.level === "error" || e.level === "warning") journal(`page ${e.level} :`, e.message, e.sourceId ? `(${e.sourceId}:${e.lineNumber})` : "");
   });
-  win.webContents.on("render-process-gone", (_e, details) => journal("page : processus arrêté", JSON.stringify(details)));
+  let rechargements = 0;
+  win.webContents.on("render-process-gone", (_e, details) => {
+    journal("page : processus arrêté", JSON.stringify(details));
+    if (app.isQuitting || details.reason === "clean-exit") return;
+    if (relancerSansGpu(`page ${details.reason}`)) return;
+    if (rechargements++ < 2) {
+      setTimeout(() => win && !win.isDestroyed() && win.webContents.reload(), 500);
+      return;
+    }
+    dialog.showErrorBox(
+      "Le rédacteur",
+      `La page s'est arrêtée (${details.reason}). Fermez puis rouvrez Le rédacteur.\n\nDétails pour l'assistance : ${JOURNAL}`,
+    );
+  });
   win.webContents.on("did-fail-load", (_e, code, desc, u) => journal("page : chargement impossible", String(code), desc, u));
   win.webContents.on("unresponsive", () => journal("page : ne répond plus"));
   win.once("ready-to-show", montrer);
@@ -227,7 +262,14 @@ if (!app.requestSingleInstanceLock()) {
       win.focus();
     }
   });
-  journal("démarrage", app.getVersion(), process.platform, process.arch, "Electron", process.versions.electron);
+  journal(
+    "démarrage",
+    app.getVersion(),
+    `${process.platform} ${os.release()} ${process.arch}`,
+    "Electron",
+    process.versions.electron,
+    fs.existsSync(SANS_GPU) ? "sans accélération graphique" : "",
+  );
   app.whenReady().then(() =>
     createWindow().catch((err) => {
       journal("main : échec du démarrage", err && err.stack ? err.stack : String(err));
