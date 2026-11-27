@@ -1,11 +1,11 @@
 {
   "name": "Le rédacteur",
   "short_name": "Rédacteur",
-  "description": "Enregistre, transcrit et transforme tes contenus en notes claires.",
+  "description": "Rédigez vos courriers administratifs dans le style de vos courriers signés.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f6f1e7",
-  "theme_color": "#1f1c18",
+  "background_color": "#f3f5f7",
+  "theme_color": "#ef7d00",
   "lang": "fr",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

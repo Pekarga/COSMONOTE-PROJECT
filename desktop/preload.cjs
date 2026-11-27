@@ -1,0 +1,7 @@
+// Pont minimal entre la page et l'appli de bureau : l'export PDF de la feuille A4 et le bouton Quitter.
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("redacteur", {
+  savePdf: (name) => ipcRenderer.invoke("save-pdf", String(name || "")),
+  quitter: () => ipcRenderer.send("quitter"),
+});

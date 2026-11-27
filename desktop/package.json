@@ -1,8 +1,8 @@
 {
   "name": "le-redacteur-desktop",
   "productName": "Le rédacteur",
-  "version": "0.2.0",
-  "description": "Le rédacteur : enregistre, transcrit et transforme tes contenus en notes claires.",
+  "version": "0.3.0",
+  "description": "Le rédacteur : rédige vos courriers administratifs et vos notes au Directeur dans le style de vos courriers signés.",
   "author": "Le rédacteur",
   "private": true,
   "main": "main.cjs",
@@ -19,6 +19,7 @@
     },
     "files": [
       "main.cjs",
+      "preload.cjs",
       "icon.png",
       "package.json"
     ],

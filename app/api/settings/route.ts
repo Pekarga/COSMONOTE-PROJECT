@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { guard } from "@/lib/auth";
-import { anthropicKey, deepgramKey, transcriptionLanguage } from "@/lib/config";
-import { setSetting } from "@/lib/db";
+import { anthropicKey } from "@/lib/config";
+import { getSetting, setSetting } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -14,22 +14,18 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   return Response.json({
     anthropic: mask(anthropicKey()),
-    deepgram: mask(deepgramKey()),
-    language: transcriptionLanguage(),
+    nom: getSetting("nom") ?? "",
+    fonction: getSetting("fonction") ?? "",
   });
 }
 
 export async function POST(req: NextRequest) {
   const denied = await guard(req);
   if (denied) return denied;
-  const body = (await req.json().catch(() => ({}))) as {
-    anthropic?: string;
-    deepgram?: string;
-    language?: string;
-  };
+  const body = (await req.json().catch(() => ({}))) as { anthropic?: unknown; nom?: unknown; fonction?: unknown };
   // Une valeur absente ne change rien ; une chaîne vide efface la clé.
   if (typeof body.anthropic === "string") setSetting("anthropic_api_key", body.anthropic.trim());
-  if (typeof body.deepgram === "string") setSetting("deepgram_api_key", body.deepgram.trim());
-  if (typeof body.language === "string") setSetting("transcription_language", body.language.trim());
+  if (typeof body.nom === "string") setSetting("nom", body.nom.trim().slice(0, 80));
+  if (typeof body.fonction === "string") setSetting("fonction", body.fonction.trim().slice(0, 80));
   return Response.json({ ok: true });
 }

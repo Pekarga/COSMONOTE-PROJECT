@@ -1,51 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
 import "./globals.css";
-import { Logo } from "@/components/Logo";
-import { Nav } from "@/components/Nav";
+import { DropGuard } from "@/components/DropGuard";
 import { RegisterSW } from "@/components/RegisterSW";
-import { hasClaude, hasDeepgram } from "@/lib/config";
+import { Shell } from "@/components/Shell";
+import { hasClaude } from "@/lib/config";
+import { getSetting } from "@/lib/db";
 
 export const metadata: Metadata = {
-  title: "Le rédacteur",
-  description: "Enregistre, transcrit et transforme tes contenus en notes claires.",
+  title: "Rédacteur de Courriers Administratifs",
+  description: "Rédigez vos courriers administratifs et vos notes au Directeur dans le style de vos courriers signés.",
   manifest: "/manifest.webmanifest",
   icons: { icon: "/icon.svg", apple: "/icon-192.png" },
 };
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f1e7" },
-    { media: "(prefers-color-scheme: dark)", color: "#17150f" },
-  ],
-};
+export const viewport: Viewport = { themeColor: "#ef7d00" };
 
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const missing = [!hasDeepgram() && "Deepgram", !hasClaude() && "Anthropic"].filter(Boolean);
   return (
     <html lang="fr">
       <body>
-        <header className="topbar">
-          <div className="topbar-inner">
-            <Link href="/" className="brand">
-              <Logo />
-              <span className="brand-name">
-                Le <em>rédacteur</em>
-              </span>
-            </Link>
-            <Nav />
-          </div>
-        </header>
-        {missing.length > 0 && (
-          <div className="demo-banner">
-            Mode démo : les transcriptions et les notes sont des exemples. Ajoute {missing.length > 1 ? "tes clés" : "ta clé"}{" "}
-            {missing.join(" et ")}{" "}
-            dans les <Link href="/reglages">Réglages</Link> pour activer la vraie IA.
-          </div>
-        )}
-        <main className="shell">{children}</main>
+        <Shell nom={getSetting("nom") ?? ""} fonction={getSetting("fonction") ?? ""} demo={!hasClaude()}>
+          {children}
+        </Shell>
+        <DropGuard />
         <RegisterSW />
       </body>
     </html>

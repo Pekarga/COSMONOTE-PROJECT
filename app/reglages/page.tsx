@@ -1,162 +1,132 @@
 "use client";
 import { useEffect, useState } from "react";
 
-type Settings = { anthropic: string | null; deepgram: string | null; language: string };
-
-const LANGUAGES = [
-  ["fr", "Français"],
-  ["en", "Anglais"],
-  ["es", "Espagnol"],
-  ["de", "Allemand"],
-  ["it", "Italien"],
-  ["pt", "Portugais"],
-  ["ar", "Arabe"],
-  ["multi", "Plusieurs langues"],
-];
+type Settings = { anthropic: string | null; nom: string; fonction: string };
 
 export default function SettingsPage() {
   const [current, setCurrent] = useState<Settings | null>(null);
-  const [anthropic, setAnthropic] = useState("");
-  const [deepgram, setDeepgram] = useState("");
-  const [language, setLanguage] = useState("fr");
-  const [saved, setSaved] = useState(false);
+  const [cle, setCle] = useState("");
+  const [nom, setNom] = useState("");
+  const [fonction, setFonction] = useState("");
 
   async function load() {
     const res = await fetch("/api/settings");
     if (!res.ok) return;
     const s = (await res.json()) as Settings;
     setCurrent(s);
-    setLanguage(s.language);
+    setNom(s.nom);
+    setFonction(s.fonction);
   }
   useEffect(() => {
     load();
   }, []);
 
-  async function save(patch: Partial<Record<"anthropic" | "deepgram" | "language", string>>) {
+  async function save(patch: { anthropic?: string; nom?: string; fonction?: string }) {
     await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    setAnthropic("");
-    setDeepgram("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    await load();
+    setCle("");
     // Recharge pour mettre à jour le bandeau du mode démo.
     window.location.reload();
-  }
-
-  function KeyField(props: {
-    label: string;
-    help: React.ReactNode;
-    value: string;
-    onChange: (v: string) => void;
-    currentKey: string | null | undefined;
-    field: "anthropic" | "deepgram";
-    placeholder: string;
-  }) {
-    return (
-      <section className="card panel">
-        <h2>{props.label}</h2>
-        <p className="small muted">{props.help}</p>
-        <p className="small">
-          {props.currentKey ? (
-            <>
-              Clé enregistrée : <code>{props.currentKey}</code>
-            </>
-          ) : (
-            <span className="pill">Mode démo</span>
-          )}
-        </p>
-        <div className="toolbar">
-          <input
-            className="input"
-            type="password"
-            autoComplete="off"
-            placeholder={props.placeholder}
-            value={props.value}
-            onChange={(e) => props.onChange(e.target.value)}
-            style={{ flex: 1, minWidth: 200 }}
-          />
-          <button
-            className="btn btn-primary"
-            disabled={!props.value.trim()}
-            onClick={() => save({ [props.field]: props.value })}
-          >
-            Enregistrer
-          </button>
-          {props.currentKey && (
-            <button className="btn btn-ghost" onClick={() => save({ [props.field]: "" })}>
-              Retirer
-            </button>
-          )}
-        </div>
-      </section>
-    );
   }
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Réglages</h1>
-          <p>Ajoute tes clés pour passer du mode démo à la vraie IA. Elles restent sur ton ordinateur.</p>
+          <h1>Paramètres</h1>
+          <p>La clé reste sur votre ordinateur, dans la base de données de l&apos;application.</p>
         </div>
-        {saved && <span className="pill">Enregistré</span>}
       </div>
-      <div className="notes-grid">
-        {KeyField({
-          label: "Transcription (Deepgram)",
-          help: (
-            <>
-              Transcrit l&apos;audio et reconnaît les intervenants. Crée une clé sur{" "}
-              <a href="https://console.deepgram.com" target="_blank" rel="noreferrer">
-                console.deepgram.com
-              </a>
-              .
-            </>
-          ),
-          value: deepgram,
-          onChange: setDeepgram,
-          currentKey: current?.deepgram,
-          field: "deepgram",
-          placeholder: "Colle ta clé Deepgram",
-        })}
-        {KeyField({
-          label: "Notes et assistant (Claude)",
-          help: (
-            <>
-              Rédige les notes et répond à tes questions. Crée une clé sur{" "}
-              <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
-                console.anthropic.com
-              </a>
-              .
-            </>
-          ),
-          value: anthropic,
-          onChange: setAnthropic,
-          currentKey: current?.anthropic,
-          field: "anthropic",
-          placeholder: "sk-ant-…",
-        })}
+
+      <div className="settings-grid">
         <section className="card panel">
-          <h2>Langue parlée</h2>
-          <p className="small muted">La langue principale de tes enregistrements, pour une meilleure transcription.</p>
-          <select
-            className="input"
-            value={language}
-            onChange={(e) => {
-              setLanguage(e.target.value);
-              save({ language: e.target.value });
+          <h2 className="panel-head vert">Votre nom et votre fonction</h2>
+          <p className="small muted">Affichés en haut à droite de l&apos;application.</p>
+          <form
+            className="form-grid panel"
+            style={{ padding: 0 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              save({ nom, fonction });
             }}
           >
-            {LANGUAGES.map(([code, label]) => (
-              <option key={code} value={code}>
-                {label}
-              </option>
-            ))}
-          </select>
+            <label className="form-row">
+              <span className="field-label">Nom</span>
+              <input className="input" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex. : Abdel …" />
+            </label>
+            <label className="form-row">
+              <span className="field-label">Fonction</span>
+              <input
+                className="input"
+                value={fonction}
+                onChange={(e) => setFonction(e.target.value)}
+                placeholder="Ex. : Chargé d'études, DCB"
+              />
+            </label>
+            <div className="toolbar">
+              <button className="btn btn-primary">Enregistrer</button>
+            </div>
+          </form>
+        </section>
+
+        <section className="card panel">
+          <h2 className="panel-head">Rédaction par l&apos;IA (Claude)</h2>
+          <p className="small muted">
+            Sans clé, Le rédacteur fonctionne en mode démo : il reprend la mise en page et les formules de vos courriers signés et
+            construit le projet à partir de vos consignes, mais il ne lit pas les photos et les scans, et le texte reste simple.
+            Avec une clé Claude, il lit tout le dossier, analyse la demande et rédige dans votre style. Créez une clé sur{" "}
+            <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
+              console.anthropic.com
+            </a>
+            .
+          </p>
+          <p className="small">
+            {current?.anthropic ? (
+              <>
+                Clé enregistrée : <code>{current.anthropic}</code>
+              </>
+            ) : (
+              <span className="pill">Mode démo</span>
+            )}
+          </p>
+          <form
+            className="toolbar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (cle.trim()) save({ anthropic: cle });
+            }}
+          >
+            <input
+              className="input"
+              type="password"
+              autoComplete="off"
+              placeholder="sk-ant-…"
+              value={cle}
+              onChange={(e) => setCle(e.target.value)}
+              style={{ flex: 1, minWidth: 200 }}
+              aria-label="Clé Claude"
+            />
+            <button className="btn btn-primary" disabled={!cle.trim()}>
+              Enregistrer
+            </button>
+            {current?.anthropic && (
+              <button type="button" className="btn btn-ghost" onClick={() => save({ anthropic: "" })}>
+                Retirer
+              </button>
+            )}
+          </form>
+        </section>
+
+        <section className="card panel">
+          <h2 className="panel-head clair">Vos données</h2>
+          <p className="small muted">
+            Les courriers signés, les dossiers, les pièces et les projets restent sur cet ordinateur. Avec une clé Claude, le
+            contenu d&apos;un dossier est envoyé à Claude au moment de l&apos;analyse et de la rédaction. Selon les conditions de
+            l&apos;API d&apos;Anthropic, il ne sert pas à entraîner les modèles.
+          </p>
         </section>
       </div>
     </>
